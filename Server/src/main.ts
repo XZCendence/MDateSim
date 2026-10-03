@@ -28,6 +28,16 @@ async function main(): Promise<void> {
     .build();
 }
 
+function formatPlayer(player: {
+  identity: Identity;
+  createdAt: { microsSinceUnixEpoch: bigint };
+}): string {
+  const createdAt = new Date(
+    Number(player.createdAt.microsSinceUnixEpoch / 1000n)
+  ).toISOString();
+  return `${player.identity.toHexString()} (created ${createdAt})`;
+}
+
 function onConnect(
   conn: DbConnection,
   identity: Identity,
@@ -39,36 +49,28 @@ function onConnect(
   // Save token for future connections
   saveToken(token);
 
+  conn.db.player.onInsert((_ctx: EventContext, player) => {
+    console.log(`[Inserted] ${formatPlayer(player)}`);
+  });
+
   // Subscribe to all tables
   conn
     .subscriptionBuilder()
     .onApplied(ctx => {
-      // Show current people
-      const people = [...ctx.db.person.iter()];
-      console.log(`\nCurrent people (${people.length}):`);
-      if (people.length === 0) {
+      const players = [...ctx.db.player.iter()];
+      console.log(`\nCurrent players (${players.length}):`);
+      if (players.length === 0) {
         console.log('  (none yet)');
       } else {
-        for (const person of people) {
-          console.log(`  - ${person.name}`);
+        for (const player of players) {
+          console.log(`  - ${formatPlayer(player)}`);
         }
       }
-
-      setupCLI(conn);
     })
     .onError((_ctx, err) => {
       console.error('Subscription error:', err);
     })
     .subscribeToAllTables();
-
-  // Register callbacks for table changes
-  conn.db.person.onInsert((_ctx: EventContext, person) => {
-    console.log(`[Added] ${person.name}`);
-  });
-
-  conn.db.person.onDelete((_ctx: EventContext, person) => {
-    console.log(`[Removed] ${person.name}`);
-  });
 }
 
 function onDisconnect(_ctx: ErrorContext, error?: Error): void {
@@ -82,71 +84,6 @@ function onDisconnect(_ctx: ErrorContext, error?: Error): void {
 function onConnectError(_ctx: ErrorContext, error: Error): void {
   console.error('Connection error:', error);
   process.exit(1);
-}
-
-function setupCLI(conn: DbConnection): void {
-  console.log('\nCommands:');
-  console.log('  <name>  - Add a person with that name');
-  console.log('  list    - Show all people');
-  console.log('  hello   - Greet everyone (check server logs)');
-  console.log('  Ctrl+C  - Quit\n');
-
-  const prompt = () => process.stdout.write('> ');
-  prompt();
-
-  // Use Bun's stdin for reading input
-  const decoder = new TextDecoder();
-  const stdin = Bun.stdin.stream();
-  const reader = stdin.getReader();
-
-  const shutdown = (): void => {
-    console.log('\nShutting down...');
-    conn.disconnect();
-    process.exit(0);
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  const readLoop = async () => {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        shutdown();
-        break;
-      }
-
-      const text = decoder.decode(value).trim();
-      if (!text) {
-        prompt();
-        continue;
-      }
-
-      if (text.toLowerCase() === 'list') {
-        console.log('\nPeople in database:');
-        let count = 0;
-        for (const person of conn.db.person.iter()) {
-          console.log(`  - ${person.name}`);
-          count++;
-        }
-        if (count === 0) {
-          console.log('  (none)');
-        }
-        console.log();
-      } else if (text.toLowerCase() === 'hello') {
-        conn.reducers.sayHello({});
-        console.log('Called sayHello reducer (check server logs)\n');
-      } else {
-        conn.reducers.add({ name: text });
-      }
-      prompt();
-    }
-  };
-
-  readLoop().catch(err => {
-    console.error('CLI error:', err);
-    shutdown();
-  });
 }
 
 // Token persistence using Bun APIs
