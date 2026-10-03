@@ -1,0 +1,4 @@
+pykinect_azure
+mediapipe>=1.0
+opencv-python
+numpy
