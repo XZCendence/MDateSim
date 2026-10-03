@@ -3,11 +3,12 @@ import type { DateProfile } from "../data/dates";
 interface Props {
   date: DateProfile;
   onPick: (date: DateProfile) => void;
+  selected?: boolean;
 }
 
-export default function DateCard({ date, onPick }: Props) {
+export default function DateCard({ date, onPick, selected = false }: Props) {
   return (
-    <div className="date-card" style={{ "--accent": date.accent } as React.CSSProperties}>
+    <div className={`date-card${selected ? " is-selected" : ""}`} style={{ "--accent": date.accent } as React.CSSProperties}>
     <article className="card">
       <div className="avatar" aria-hidden>
         {date.name[0]}
@@ -18,7 +19,7 @@ export default function DateCard({ date, onPick }: Props) {
       <p className="tagline">{date.tagline}</p>
       <p>{date.bio}</p>
       <p className="muted small">IRL: {date.irlStyle}</p>
-      <button onClick={() => onPick(date)}>Ask her out</button>
+      <button onClick={() => onPick(date)}>{selected ? `Continue with ${date.name}` : "Ask her out"}</button>
     </article>
     <div className="date-picture">
       {date.image ? (

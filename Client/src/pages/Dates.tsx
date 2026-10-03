@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { findDate } from "../data/dates";
-import { loadSession, saveSession, type IrlDate, type Session } from "../lib/session";
+import { saveSession, useSession, type IrlDate, type Session } from "../lib/session";
 
 const ACTIVITIES = ["Coffee", "Dinner", "Arcade", "Park walk", "Movie night"];
 
 export default function Dates() {
-  const [session, setSession] = useState<Session | null>(() => loadSession());
+  const session = useSession();
   const [when, setWhen] = useState("");
   const [activity, setActivity] = useState(ACTIVITIES[0]);
 
@@ -20,7 +19,7 @@ export default function Dates() {
     );
   }
 
-  const date = findDate(session.dateId);
+  const date = session.character;
 
   function schedule(e: FormEvent) {
     e.preventDefault();
@@ -30,7 +29,6 @@ export default function Dates() {
       irlDates: [...session.irlDates, { id: crypto.randomUUID(), when, activity }],
     };
     saveSession(next);
-    setSession(next);
     setWhen("");
     // TODO: call a SpacetimeDB reducer here so the Kinect side (Irl/) and the
     // iMessage loop (Server/) both see the scheduled date.
@@ -40,12 +38,11 @@ export default function Dates() {
     if (!session) return;
     const next = { ...session, irlDates: session.irlDates.filter((d) => d.id !== id) };
     saveSession(next);
-    setSession(next);
   }
 
   return (
     <section>
-      <h1>IRL dates with {date?.name ?? "???"}</h1>
+      <h1>IRL dates with {date.name}</h1>
       <p className="muted">
         When the date starts, she takes over. Stand in front of the Kinect and do what she says.
       </p>
