@@ -1,0 +1,75 @@
+:root {
+  --bg: #0f0f14;
+  --panel: #181822;
+  --text: #f1f1f5;
+  --muted: #9a9aad;
+  --accent: #f472b6;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+h1 { margin: 0 0 0.25rem; font-size: 2rem; }
+h2 { margin: 0.5rem 0 0; font-size: 1.25rem; }
+p { margin: 0.4rem 0; line-height: 1.45; }
+a { color: inherit; }
+
+.shell { max-width: 1040px; margin: 0 auto; padding: 0 16px 48px; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 0; border-bottom: 1px solid #26263a; margin-bottom: 28px;
+}
+.brand { font-weight: 800; letter-spacing: 0.02em; text-decoration: none; }
+.topbar nav { display: flex; gap: 18px; }
+.topbar nav a { color: var(--muted); text-decoration: none; }
+.topbar nav a.active { color: var(--text); }
+
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+.center { text-align: center; max-width: 520px; margin: 0 auto; }
+.tagline { font-style: italic; color: var(--accent); }
+
+.grid {
+  display: grid; gap: 18px; margin-top: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.card {
+  background: var(--panel); border: 1px solid #26263a; border-radius: 16px;
+  padding: 20px; display: flex; flex-direction: column; gap: 4px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.card button { margin-top: auto; }
+.avatar {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #0f0f14; font-weight: 800; font-size: 1.4rem;
+}
+
+button, .button {
+  display: inline-block; cursor: pointer; border: 0; border-radius: 10px;
+  padding: 10px 16px; font: inherit; font-weight: 600; text-decoration: none;
+  background: var(--accent); color: #0f0f14; margin-top: 12px;
+}
+button:hover, .button:hover { filter: brightness(1.1); }
+button.ghost { background: transparent; color: var(--muted); margin: 0; padding: 6px 10px; }
+button.ghost:hover { color: var(--text); }
+
+.qr {
+  display: inline-block; background: #fff; padding: 16px; border-radius: 16px; margin: 20px 0 8px;
+}
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
+.row input, .row select {
+  flex: 1 1 180px; padding: 10px 12px; border-radius: 10px; border: 1px solid #26263a;
+  background: var(--panel); color: var(--text); font: inherit;
+}
+.row button { margin: 0; }
+
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--panel); border: 1px solid #26263a; border-radius: 12px; padding: 12px 14px;
+}
