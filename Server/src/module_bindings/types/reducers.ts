@@ -17,6 +17,7 @@ import PickDateReducer from "../pick_date_reducer";
 import RecordGestureReducer from "../record_gesture_reducer";
 import ScheduleIrlDateReducer from "../schedule_irl_date_reducer";
 import SetDemandReducer from "../set_demand_reducer";
+import SetDemandForReducer from "../set_demand_for_reducer";
 import SetIrlDateStatusReducer from "../set_irl_date_status_reducer";
 import SetPhaseReducer from "../set_phase_reducer";
 
@@ -31,6 +32,7 @@ export type PickDateParams = __Infer<typeof PickDateReducer>;
 export type RecordGestureParams = __Infer<typeof RecordGestureReducer>;
 export type ScheduleIrlDateParams = __Infer<typeof ScheduleIrlDateReducer>;
 export type SetDemandParams = __Infer<typeof SetDemandReducer>;
+export type SetDemandForParams = __Infer<typeof SetDemandForReducer>;
 export type SetIrlDateStatusParams = __Infer<typeof SetIrlDateStatusReducer>;
 export type SetPhaseParams = __Infer<typeof SetPhaseReducer>;
 

@@ -357,6 +357,23 @@ export const setIrlDateStatus = spacetimedb.reducer(
   }
 );
 
+/** Texting loop (a different identity) sets or clears a demand on the player's behalf. */
+export const setDemandFor = spacetimedb.reducer(
+  { player: t.identity(), demand: t.string() },
+  (ctx, { player, demand }) => {
+    const state = ctx.db.dateState.player.find(player);
+    if (state == null) {
+      throw new SenderError('no date state for player');
+    }
+    if (demand === '') {
+      ctx.db.dateState.player.update({ ...state, demand: undefined, demandMet: false });
+      return;
+    }
+    requireDemand(demand);
+    ctx.db.dateState.player.update({ ...state, demand, demandMet: false });
+  }
+);
+
 /** Kinect reports a gesture attempt; affection moves with it and the open demand is resolved. */
 export const recordGesture = spacetimedb.reducer(
   { player: t.identity(), gesture: t.string(), success: t.bool(), affectionDelta: t.i32() },

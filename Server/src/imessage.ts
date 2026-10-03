@@ -71,6 +71,43 @@ function buildSystem(persona: Persona, affection: number, demand: string | undef
   return s;
 }
 
+const DEMAND_TAG = /\s*\[demand:([a-z_]+)\]\s*$/i;
+
+/** Pull a trailing [demand:x] tag off the reply. Returns the clean text and the demand, if any. */
+function splitDemand(reply: string): { text: string; demand?: string } {
+  const m = DEMAND_TAG.exec(reply);
+  if (!m) return { text: reply };
+  return { text: reply.replace(DEMAND_TAG, "").trim(), demand: m[1]!.toLowerCase() };
+}
+
+// When the Kinect records a successful gesture, she reacts in the thread on her own.
+db.db.gestureEvent.onInsert(async (_ctx, event) => {
+  if (!event.success) return;
+  const session = [...db.db.gameSession.iter()].find((s) => s.player.isEqual(event.player));
+  if (!session?.spaceId) return;
+  const persona = personaById(session.dateId);
+  const affection = db.db.affection.player.find(session.player)?.value ?? 0;
+  const history = historyFor(session.player);
+  try {
+    const space = await imessage(app).space.get(session.spaceId);
+    const raw = await chat([
+      { role: "system", content: buildSystem(persona, affection, undefined, false) },
+      ...history,
+      {
+        role: "user",
+        content: `[The camera just saw the player do the "${event.gesture}" you asked for. React to it in one or two texts. Do not add a demand tag.]`,
+      },
+    ]);
+    const { text } = splitDemand(raw);
+    if (!text) return;
+    await space.send(text);
+    await db.reducers.logMessage({ player: session.player, role: "assistant", text });
+    console.log(`[${session.spaceId}] ${persona.name} (reacting to ${event.gesture}): ${text}`);
+  } catch (err) {
+    console.error(`[${session.spaceId}] gesture reaction failed:`, err);
+  }
+});
+
 console.log("[imessage] listening");
 for await (const [space, message] of app.messages) {
   if (message.content.type !== "text") continue;
@@ -112,14 +149,20 @@ for await (const [space, message] of app.messages) {
         { role: "user", content: text },
       ]),
     );
-    if (!reply) continue;
-    await space.send(reply);
+    const { text: replyText, demand: newDemand } = splitDemand(reply);
+    if (!replyText) continue;
+    await space.send(replyText);
     if (session) {
-      await db.reducers.logMessage({ player: session.player, role: "assistant", text: reply });
+      await db.reducers.logMessage({ player: session.player, role: "assistant", text: replyText });
+      if (newDemand && !demand) {
+        db.reducers.setDemandFor({ player: session.player, demand: newDemand }).catch((err) =>
+          console.warn(`[${space.id}] setDemandFor(${newDemand}) rejected:`, String(err)),
+        );
+      }
     } else {
-      fallbackHistory.get(space.id)?.push({ role: "assistant", content: reply });
+      fallbackHistory.get(space.id)?.push({ role: "assistant", content: replyText });
     }
-    console.log(`[${space.id}] ${persona.name}${session ? "" : " (unlinked)"}: ${reply}`);
+    console.log(`[${space.id}] ${persona.name}${session ? "" : " (unlinked)"}: ${replyText}${newDemand ? `  [demand:${newDemand}]` : ""}`);
   } catch (err) {
     console.error(`[${space.id}] grok failed:`, err);
     await space.send("ugh my phone is being weird, say that again?");

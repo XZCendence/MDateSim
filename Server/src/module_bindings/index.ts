@@ -45,6 +45,7 @@ import PickDateReducer from "./pick_date_reducer";
 import RecordGestureReducer from "./record_gesture_reducer";
 import ScheduleIrlDateReducer from "./schedule_irl_date_reducer";
 import SetDemandReducer from "./set_demand_reducer";
+import SetDemandForReducer from "./set_demand_for_reducer";
 import SetIrlDateStatusReducer from "./set_irl_date_status_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
 
@@ -164,6 +165,7 @@ const reducersSchema = __reducers(
   __reducerSchema("record_gesture", RecordGestureReducer),
   __reducerSchema("schedule_irl_date", ScheduleIrlDateReducer),
   __reducerSchema("set_demand", SetDemandReducer),
+  __reducerSchema("set_demand_for", SetDemandForReducer),
   __reducerSchema("set_irl_date_status", SetIrlDateStatusReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
 );
