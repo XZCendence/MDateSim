@@ -62,6 +62,51 @@ function refresh(db: {
   });
 }
 
+/**
+ * Relationship state for the current player (IRL dates, affection, the open
+ * demand). Bumped on every row change so `useSyncExternalStore` re-renders.
+ */
+export type MyRows = {
+  irlDates: ReturnType<typeof readIrlDates>;
+  affection: number;
+  demand: string | undefined;
+  demandMet: boolean;
+};
+
+let rowsVersion = 0;
+let rowsCache: { version: number; value: MyRows } | undefined;
+
+function readIrlDates() {
+  if (!conn || !identityHex) return [];
+  return [...conn.db.irlDate.iter()].filter((r) => r.player.toHexString() === identityHex);
+}
+
+function bumpRows(): void {
+  rowsVersion += 1;
+  emit();
+}
+
+export function getMyRows(): MyRows {
+  if (rowsCache?.version === rowsVersion) return rowsCache.value;
+  let affection = 0;
+  let demand: string | undefined;
+  let demandMet = false;
+  if (conn && identityHex) {
+    for (const a of conn.db.affection.iter()) {
+      if (a.player.toHexString() === identityHex) affection = a.value;
+    }
+    for (const d of conn.db.dateState.iter()) {
+      if (d.player.toHexString() === identityHex) {
+        demand = d.demand;
+        demandMet = d.demandMet;
+      }
+    }
+  }
+  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet };
+  rowsCache = { version: rowsVersion, value };
+  return value;
+}
+
 export function subscribeSpacetime(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -90,10 +135,18 @@ export function getSpacetime(): DbConnection | undefined {
       c.db.gameSession.onInsert((ctx) => refresh(ctx.db));
       c.db.gameSession.onUpdate((ctx) => refresh(ctx.db));
       c.db.gameSession.onDelete((ctx) => refresh(ctx.db));
+      for (const table of [c.db.irlDate, c.db.affection, c.db.dateState]) {
+        table.onInsert(bumpRows);
+        table.onUpdate(bumpRows);
+        table.onDelete(bumpRows);
+      }
       c.subscriptionBuilder()
-        .onApplied((ctx) => refresh(ctx.db))
-        .onError((_ctx, err) => console.error("[spacetime] subscription error", err))
-        .subscribe([tables.gameSession]);
+        .onApplied((ctx) => {
+          refresh(ctx.db);
+          bumpRows();
+        })
+        .onError((ctx) => console.error("[spacetime] subscription error", ctx.event))
+        .subscribe([tables.gameSession, tables.irlDate, tables.affection, tables.dateState]);
     })
     .onConnectError((_c, err) => console.error("[spacetime] connect error", err))
     .build();
