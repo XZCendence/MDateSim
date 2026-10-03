@@ -6,5 +6,19 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClaimSessionReducer from "../claim_session_reducer";
+import ClearDemandReducer from "../clear_demand_reducer";
+import ClearSessionReducer from "../clear_session_reducer";
+import MarkDemandMetReducer from "../mark_demand_met_reducer";
+import PickDateReducer from "../pick_date_reducer";
+import SetDemandReducer from "../set_demand_reducer";
+import SetPhaseReducer from "../set_phase_reducer";
 
+export type ClaimSessionParams = __Infer<typeof ClaimSessionReducer>;
+export type ClearDemandParams = __Infer<typeof ClearDemandReducer>;
+export type ClearSessionParams = __Infer<typeof ClearSessionReducer>;
+export type MarkDemandMetParams = __Infer<typeof MarkDemandMetReducer>;
+export type PickDateParams = __Infer<typeof PickDateReducer>;
+export type SetDemandParams = __Infer<typeof SetDemandReducer>;
+export type SetPhaseParams = __Infer<typeof SetPhaseReducer>;
 

@@ -28,14 +28,50 @@ async function main(): Promise<void> {
     .build();
 }
 
+type TimestampMicros = { microsSinceUnixEpoch: bigint };
+
+function formatTimestamp(timestamp: TimestampMicros): string {
+  return new Date(
+    Number(timestamp.microsSinceUnixEpoch / 1000n)
+  ).toISOString();
+}
+
 function formatPlayer(player: {
   identity: Identity;
-  createdAt: { microsSinceUnixEpoch: bigint };
+  createdAt: TimestampMicros;
 }): string {
-  const createdAt = new Date(
-    Number(player.createdAt.microsSinceUnixEpoch / 1000n)
-  ).toISOString();
-  return `${player.identity.toHexString()} (created ${createdAt})`;
+  return `${player.identity.toHexString()} (created ${formatTimestamp(player.createdAt)})`;
+}
+
+function formatSession(session: {
+  player: Identity;
+  dateId: string;
+  startedAt: TimestampMicros;
+  spaceId?: string;
+}): string {
+  const space = session.spaceId ? session.spaceId : '(empty)';
+  return `${session.player.toHexString()} date=${session.dateId} started=${formatTimestamp(session.startedAt)} space=${space}`;
+}
+
+function formatDateState(state: {
+  player: Identity;
+  phase: string;
+  demand?: string;
+  demandMet: boolean;
+}): string {
+  const demand = state.demand ? state.demand : '(none)';
+  return `${state.player.toHexString()} phase=${state.phase} demand=${demand} met=${state.demandMet}`;
+}
+
+function logTable(label: string, lines: string[]): void {
+  console.log(`\nCurrent ${label} (${lines.length}):`);
+  if (lines.length === 0) {
+    console.log('  (none yet)');
+  } else {
+    for (const line of lines) {
+      console.log(`  - ${line}`);
+    }
+  }
 }
 
 function onConnect(
@@ -52,20 +88,23 @@ function onConnect(
   conn.db.player.onInsert((_ctx: EventContext, player) => {
     console.log(`[Inserted] ${formatPlayer(player)}`);
   });
+  conn.db.gameSession.onInsert((_ctx: EventContext, session) => {
+    console.log(`[Inserted] ${formatSession(session)}`);
+  });
+  conn.db.dateState.onInsert((_ctx: EventContext, state) => {
+    console.log(`[Inserted] ${formatDateState(state)}`);
+  });
 
   // Subscribe to all tables
   conn
     .subscriptionBuilder()
     .onApplied(ctx => {
-      const players = [...ctx.db.player.iter()];
-      console.log(`\nCurrent players (${players.length}):`);
-      if (players.length === 0) {
-        console.log('  (none yet)');
-      } else {
-        for (const player of players) {
-          console.log(`  - ${formatPlayer(player)}`);
-        }
-      }
+      logTable('players', [...ctx.db.player.iter()].map(formatPlayer));
+      logTable('sessions', [...ctx.db.gameSession.iter()].map(formatSession));
+      logTable(
+        'date states',
+        [...ctx.db.dateState.iter()].map(formatDateState)
+      );
     })
     .onError((_ctx, err) => {
       console.error('Subscription error:', err);

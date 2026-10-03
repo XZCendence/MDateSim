@@ -10,6 +10,22 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const DateState = __t.object("DateState", {
+  player: __t.identity(),
+  phase: __t.string(),
+  demand: __t.option(__t.string()),
+  demandMet: __t.bool(),
+});
+export type DateState = __Infer<typeof DateState>;
+
+export const GameSession = __t.object("GameSession", {
+  player: __t.identity(),
+  dateId: __t.string(),
+  startedAt: __t.timestamp(),
+  spaceId: __t.option(__t.string()),
+});
+export type GameSession = __Infer<typeof GameSession>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   createdAt: __t.timestamp(),
