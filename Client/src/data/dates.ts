@@ -2,7 +2,8 @@
  * The roster of dates a player can pick in the lobby.
  * Keep this in sync with whatever persona the Server's iMessage loop uses.
  */
-import emIdle from "../assets/Em-idle.webp";
+import emIdle from "../assets/bianca/Em-idle.webp";
+import lingLongIdle from "../assets/linglong/linglong-idle.webp";
 
 export interface DateProfile {
   id: string;
@@ -20,7 +21,7 @@ export interface DateProfile {
 
 export const DATES: DateProfile[] = [
   {
-    id: "sakura",
+    id: "bianca",
     name: "Bianca",
     age: 22,
     tagline: "Sweet until she isn't.",
@@ -39,6 +40,7 @@ export const DATES: DateProfile[] = [
     irlStyle: "Squats, jumping jacks, whatever she feels like.",
     intro: "yo ling long, ready to lose?",
     accent: "#60a5fa",
+    image: lingLongIdle,
   },
 ];
 
