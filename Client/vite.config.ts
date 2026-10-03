@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const bindings = fileURLToPath(
   new URL("../Server/src/module_bindings", import.meta.url),
 );
+const moduleSrc = fileURLToPath(
+  new URL("../Server/spacetimedb/src", import.meta.url),
+);
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,6 +17,6 @@ export default defineConfig({
     alias: { "@bindings": bindings },
   },
   server: {
-    fs: { allow: [".", bindings] },
+    fs: { allow: [".", bindings, moduleSrc] },
   },
 });

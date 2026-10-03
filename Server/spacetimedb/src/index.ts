@@ -6,8 +6,7 @@ import {
   type InferSchema,
   type ReducerCtx,
 } from 'spacetimedb/server';
-
-const DATE_IDS = ['sakura', 'rin'] as const;
+import { DATE_IDS } from './dateIds';
 const PHASES = ['texting', 'irl'] as const;
 const DEMANDS = ['bow', 'squat', 'still', 'jacks', 'wave'] as const;
 
@@ -64,7 +63,7 @@ function requireDateState(ctx: Ctx) {
 
 function requireDateId(dateId: string): void {
   if (!isOneOf(dateId, DATE_IDS)) {
-    throw new SenderError('dateId must be sakura or rin');
+    throw new SenderError('dateId must be bianca or rin');
   }
 }
 

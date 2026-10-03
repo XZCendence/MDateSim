@@ -1,9 +1,10 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { findDate, type DateProfile } from "../data/dates";
+import { getSpacetimeSnapshot, subscribeSpacetime } from "./spacetime";
 
 /**
- * Player session kept in localStorage until the game state moves into SpacetimeDB.
- * Shape is intentionally small so it maps 1:1 onto a future `player` table.
+ * The selected date comes from the caller's `game_session` row.
+ * localStorage only keeps scheduled IRL dates until those move into SpacetimeDB.
  */
 export interface IrlDate {
   id: string;
@@ -21,26 +22,33 @@ export interface Session {
 const KEY = "mdatesim.session";
 const CHANGE_EVENT = "mdatesim.session.change";
 
-function readStoredSession(): string | null {
-  try { return localStorage.getItem(KEY); } catch { return null; }
-}
-
-function parseSession(raw: string | null): Session | null {
+function readStored(): string | null {
   try {
-    if (!raw) return null;
-    const stored = JSON.parse(raw);
-    const character = findDate(stored.dateId);
-    if (!character || typeof stored.startedAt !== "string" || !Array.isArray(stored.irlDates)) return null;
-    // Resolve current assets and names, and upgrade sessions saved before character was added.
-    return { ...stored, character };
-  } catch { return null; }
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
 }
 
-export function loadSession(): Session | null {
-  return parseSession(readStoredSession());
+function parseIrlDates(raw: string | null): IrlDate[] {
+  try {
+    if (!raw) return [];
+    const stored = JSON.parse(raw) as { irlDates?: unknown };
+    if (!Array.isArray(stored.irlDates)) return [];
+    return stored.irlDates.filter(
+      (d): d is IrlDate =>
+        !!d &&
+        typeof d === "object" &&
+        typeof (d as IrlDate).id === "string" &&
+        typeof (d as IrlDate).when === "string" &&
+        typeof (d as IrlDate).activity === "string",
+    );
+  } catch {
+    return [];
+  }
 }
 
-function subscribe(listener: () => void) {
+function subscribeLocal(listener: () => void): () => void {
   window.addEventListener(CHANGE_EVENT, listener);
   window.addEventListener("storage", listener);
   return () => {
@@ -49,27 +57,43 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function useSession(): Session | null {
-  const raw = useSyncExternalStore(subscribe, readStoredSession, () => null);
-  return useMemo(() => parseSession(raw), [raw]);
-}
-
-export function saveSession(s: Session | null): void {
+function writeIrlDates(irlDates: IrlDate[]): void {
   try {
-    if (s) localStorage.setItem(KEY, JSON.stringify(s));
-    else localStorage.removeItem(KEY);
+    localStorage.setItem(KEY, JSON.stringify({ irlDates }));
   } catch {
     /* storage unavailable (private mode etc.) */
   }
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-export function startSession(dateId: string): Session {
-  const character = findDate(dateId);
-  if (!character) throw new Error(`Unknown date: ${dateId}`);
-  const existing = loadSession();
-  if (existing?.dateId === dateId) return existing;
-  const s: Session = { dateId, character, startedAt: new Date().toISOString(), irlDates: [] };
-  saveSession(s);
-  return s;
+let seenDateId: string | null | undefined;
+subscribeSpacetime(() => {
+  const dateId = getSpacetimeSnapshot().dateId;
+  if (seenDateId != null && dateId != null && seenDateId !== dateId) {
+    writeIrlDates([]);
+  }
+  seenDateId = dateId;
+});
+
+export function useSession(): Session | null {
+  const remote = useSyncExternalStore(subscribeSpacetime, getSpacetimeSnapshot, () => ({
+    ready: false,
+    dateId: null,
+    startedAt: null,
+  }));
+  const raw = useSyncExternalStore(subscribeLocal, readStored, () => null);
+  return useMemo(() => {
+    const character = findDate(remote.dateId ?? undefined);
+    if (!character || !remote.startedAt) return null;
+    return {
+      dateId: character.id,
+      character,
+      startedAt: remote.startedAt,
+      irlDates: parseIrlDates(raw),
+    };
+  }, [remote, raw]);
+}
+
+export function saveSession(s: Pick<Session, "irlDates"> | null): void {
+  writeIrlDates(s?.irlDates ?? []);
 }

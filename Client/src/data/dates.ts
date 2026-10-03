@@ -1,12 +1,13 @@
 /**
  * The roster of dates a player can pick in the lobby.
- * Keep this in sync with whatever persona the Server's iMessage loop uses.
+ * Ids come from the shared roster keys used by the module and the personas.
  */
 import emIdle from "../assets/bianca/Em-idle.webp";
 import lingLongIdle from "../assets/linglong/linglong-idle.webp";
+import { DATE_IDS, type DateId } from "../../../Server/spacetimedb/src/dateIds";
 
 export interface DateProfile {
-  id: string;
+  id: DateId;
   name: string;
   age: number;
   tagline: string;
@@ -19,8 +20,8 @@ export interface DateProfile {
   image?: string;
 }
 
-export const DATES: DateProfile[] = [
-  {
+const ROSTER: Record<DateId, DateProfile> = {
+  bianca: {
     id: "bianca",
     name: "Bianca",
     age: 22,
@@ -31,7 +32,7 @@ export const DATES: DateProfile[] = [
     accent: "#f472b6",
     image: emIdle,
   },
-  {
+  rin: {
     id: "rin",
     name: "Ling Long",
     age: 24,
@@ -42,7 +43,9 @@ export const DATES: DateProfile[] = [
     accent: "#60a5fa",
     image: lingLongIdle,
   },
-];
+};
+
+export const DATES: DateProfile[] = DATE_IDS.map((id) => ROSTER[id]);
 
 export function findDate(id: string | undefined): DateProfile | undefined {
   return DATES.find((d) => d.id === id);

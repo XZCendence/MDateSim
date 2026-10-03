@@ -1,7 +1,8 @@
+import { type DateId } from "../spacetimedb/src/dateIds";
+
 /**
  * The dates' personalities for the iMessage loop.
- * Ids and intro lines match Client/src/data/dates.ts so the QR's prefilled
- * first text tells us which date the player picked.
+ * Ids come from the shared roster keys so they match the client and the module.
  */
 export interface Persona {
   id: string;
@@ -19,9 +20,9 @@ calls for it you may demand they physically do something (bow, squat, hold still
 jacks) and react to whether they did it. Stay in character no matter what. Never mention
 being an AI.`;
 
-export const PERSONAS: Record<string, Persona> = {
-  sakura: {
-    id: "sakura",
+export const PERSONAS: Record<DateId, Persona> = {
+  bianca: {
+    id: "bianca",
     name: "Bianca",
     intro: "hi bianca, it's me from the lobby",
     system: `${SHARED}
@@ -40,7 +41,7 @@ and dare the player to do squats or jumping jacks on camera to prove themselves.
   },
 };
 
-export const DEFAULT_PERSONA = PERSONAS.sakura!;
+export const DEFAULT_PERSONA = PERSONAS.bianca;
 
 /** Pick a persona from the player's first text, if it matches a Client intro line. */
 export function personaFromIntro(text: string): Persona | undefined {
