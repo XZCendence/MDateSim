@@ -26,6 +26,26 @@ a { color: inherit; }
 .topbar nav { display: flex; gap: 18px; }
 .topbar nav a { color: var(--muted); text-decoration: none; }
 .topbar nav a.active { color: var(--text); }
+.selected-date {
+  display: flex; align-items: center; gap: 20px; margin-bottom: 32px;
+  padding: 20px 24px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--panel));
+  border-radius: 16px;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 12%, var(--panel)), var(--panel));
+}
+.selected-date-portrait {
+  width: 88px; height: 104px; flex-shrink: 0; border-radius: 12px; overflow: hidden;
+  display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--accent); font-size: 2rem; font-weight: 800;
+}
+.selected-date-portrait img { width: 100%; height: 100%; object-fit: contain; object-position: bottom; }
+.selected-date-copy { flex: 1; min-width: 0; }
+.selected-date-copy h2 { margin: 0; font-size: 1.5rem; }
+.selected-date .button { margin: 0; }
+.date-card.is-selected .card { border-color: var(--accent); box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent); }
+@media (max-width: 640px) {
+  .selected-date { flex-wrap: wrap; gap: 16px; padding: 20px; }
+  .selected-date .button { width: 100%; text-align: center; }
+}
 
 .muted { color: var(--muted); }
 .small { font-size: 0.9rem; }

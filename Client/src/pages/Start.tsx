@@ -1,13 +1,18 @@
 import { QRCodeSVG } from "qrcode.react";
+import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { findDate } from "../data/dates";
 import { smsLink } from "../lib/sms";
+import { startSession } from "../lib/session";
 
 const LINE = import.meta.env.VITE_DATE_LINE_NUMBER;
 
 export default function Start() {
   const { dateId } = useParams();
   const date = findDate(dateId);
+  useEffect(() => {
+    if (date) startSession(date.id);
+  }, [date]);
   if (!date) return <Navigate to="/lobby" replace />;
 
   const href = smsLink(LINE, date.intro);
