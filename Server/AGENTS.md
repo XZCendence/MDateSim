@@ -737,3 +737,7 @@ conn.db.user.onUpdate((ctx, oldUser, newUser) => console.log('Updated:', newUser
 ## iMessage modality (Photon Spectrum)
 
 See `docs/SPECTRUM.md`. Entry point is `src/imessage.ts`; run with `bun run imessage`. Secrets live in `.env` (gitignored, see `.env.example`).
+
+## Grok (xAI)
+
+`src/grok.ts` is a tiny OpenAI-compatible chat client; `src/personas.ts` holds the dates (ids match `Client/src/data/dates.ts`). The iMessage loop picks a persona from the first text and keeps per-conversation history in memory. Needs `XAI_API_KEY` in `.env`; `/date <id>` switches persona.
