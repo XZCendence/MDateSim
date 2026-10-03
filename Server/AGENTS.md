@@ -733,3 +733,7 @@ conn.db.user.onUpdate((ctx, oldUser, newUser) => console.log('Updated:', newUser
   `const [rows] = useTable(tables.message); const sorted = [...rows].sort(...)`.
 - **bigint in JSX.** ids/counts from `t.u64()`/`t.i64()` columns are `bigint`, which React
   cannot render. Wrap it: `{Number(row.id)}` or `{String(count)}`.
+
+## iMessage modality (Photon Spectrum)
+
+See `docs/SPECTRUM.md`. Entry point is `src/imessage.ts`; run with `bun run imessage`. Secrets live in `.env` (gitignored, see `.env.example`).

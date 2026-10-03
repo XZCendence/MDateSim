@@ -8,3 +8,4 @@ spacetime.local.json
 
 # secrets
 .spacetimedb-token
+.env
