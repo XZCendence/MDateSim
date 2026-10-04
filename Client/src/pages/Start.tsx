@@ -88,7 +88,13 @@ export default function Start() {
   return (
     <div className="start" style={{ backgroundImage: `url(${bgUrl})`, ["--accent" as string]: date.accent }}>
       <div className="start-shade" />
-      {date.image && <img src={date.image} alt={date.name} className="start-sprite" />}
+      {date.image && (
+        <img
+          src={date.image}
+          alt={date.name}
+          className={`start-sprite${date.id === "bianca" ? " is-bianca" : ""}`}
+        />
+      )}
 
       <div className="start-hud" title={`Affection ${mine.affection}`}>
         <span className="start-hud-label">Affection</span>
