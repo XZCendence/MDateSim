@@ -9,7 +9,7 @@ export interface ChatMessage {
 }
 
 const BASE_URL = process.env.XAI_BASE_URL ?? "https://api.x.ai/v1";
-const MODEL = process.env.XAI_MODEL ?? "grok-4.7";
+const MODEL = process.env.XAI_MODEL ?? "grok-4.3";
 
 function apiKey(): string {
   const key = process.env.XAI_API_KEY;
