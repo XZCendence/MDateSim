@@ -4,15 +4,21 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { findDate } from "../data/dates";
 import { smsLink } from "../lib/sms";
 import { startSession } from "../lib/session";
+import { useReducer } from "spacetimedb/react";
+import { reducers } from "@bindings/index";
 
 const LINE = import.meta.env.VITE_DATE_LINE_NUMBER;
 
 export default function Start() {
   const { dateId } = useParams();
   const date = findDate(dateId);
+  const pickDate = useReducer(reducers.pickDate);
   useEffect(() => {
-    if (date) startSession(date.id);
-  }, [date]);
+    if (!date) return;
+    startSession(date.id);
+    // Creates the game_session the texting loop will claim on her first text.
+    pickDate({ dateId: date.id }).catch((err) => console.error("pickDate failed", err));
+  }, [date, pickDate]);
   if (!date) return <Navigate to="/lobby" replace />;
 
   const href = smsLink(LINE, date.intro);

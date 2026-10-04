@@ -1,13 +1,30 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { saveSession, useSession, type IrlDate, type Session } from "../lib/session";
+import { Timestamp } from "spacetimedb";
+import { useReducer, useSpacetimeDB, useTable } from "spacetimedb/react";
+import { reducers, tables } from "@bindings/index";
+import { useSession } from "../lib/session";
 
 const ACTIVITIES = ["Coffee", "Dinner", "Arcade", "Park walk", "Movie night"];
 
 export default function Dates() {
   const session = useSession();
+  const { identity } = useSpacetimeDB();
   const [when, setWhen] = useState("");
   const [activity, setActivity] = useState(ACTIVITIES[0]);
+
+  // Subscribe to whole tables and filter by our identity client-side: the
+  // identity is undefined until the connection is up, and hooks can't be conditional.
+  const mine = <T extends { player: { isEqual(o: unknown): boolean } }>(rows: readonly T[]) =>
+    identity ? rows.filter((r) => r.player.isEqual(identity)) : [];
+  const [allIrlDates, ready] = useTable(tables.irlDate);
+  const [allAffection] = useTable(tables.affection);
+  const [allDateStates] = useTable(tables.dateState);
+  const irlDates = mine(allIrlDates);
+  const affection = mine(allAffection);
+  const dateStates = mine(allDateStates);
+  const schedule = useReducer(reducers.scheduleIrlDate);
+  const setStatus = useReducer(reducers.setIrlDateStatus);
 
   if (!session) {
     return (
@@ -20,25 +37,18 @@ export default function Dates() {
   }
 
   const date = session.character;
+  const state = dateStates[0];
 
-  function schedule(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!when || !session) return;
-    const next: Session = {
-      ...session,
-      irlDates: [...session.irlDates, { id: crypto.randomUUID(), when, activity }],
-    };
-    saveSession(next);
+    if (!when) return;
+    await schedule({ scheduledFor: Timestamp.fromDate(new Date(when)), activity });
     setWhen("");
-    // TODO: call a SpacetimeDB reducer here so the Kinect side (Irl/) and the
-    // iMessage loop (Server/) both see the scheduled date.
   }
 
-  function cancel(id: string) {
-    if (!session) return;
-    const next = { ...session, irlDates: session.irlDates.filter((d) => d.id !== id) };
-    saveSession(next);
-  }
+  const upcoming = [...irlDates]
+    .filter((d) => d.status !== "cancelled")
+    .sort((a, b) => Number(a.scheduledFor.microsSinceUnixEpoch - b.scheduledFor.microsSinceUnixEpoch));
 
   return (
     <section>
@@ -46,14 +56,18 @@ export default function Dates() {
       <p className="muted">
         When the date starts, she takes over. Stand in front of the Kinect and do what she says.
       </p>
+      <p className="small">
+        Affection: <strong>{affection[0]?.value ?? 0}</strong>
+        {state?.demand && (
+          <>
+            {" · "}She wants you to <strong>{state.demand}</strong>
+            {state.demandMet ? " (done)" : " (waiting)"}
+          </>
+        )}
+      </p>
 
-      <form className="row" onSubmit={schedule}>
-        <input
-          type="datetime-local"
-          value={when}
-          onChange={(e) => setWhen(e.target.value)}
-          required
-        />
+      <form className="row" onSubmit={submit}>
+        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} required />
         <select value={activity} onChange={(e) => setActivity(e.target.value)}>
           {ACTIVITIES.map((a) => (
             <option key={a}>{a}</option>
@@ -63,20 +77,20 @@ export default function Dates() {
       </form>
 
       <ul className="list">
-        {session.irlDates.length === 0 && <li className="muted">Nothing planned yet.</li>}
-        {session.irlDates
-          .slice()
-          .sort((a, b) => a.when.localeCompare(b.when))
-          .map((d: IrlDate) => (
-            <li key={d.id}>
-              <span>
-                <strong>{d.activity}</strong> · {new Date(d.when).toLocaleString()}
-              </span>
-              <button className="ghost" onClick={() => cancel(d.id)}>
+        {ready && upcoming.length === 0 && <li className="muted">Nothing planned yet.</li>}
+        {upcoming.map((d) => (
+          <li key={String(d.id)}>
+            <span>
+              <strong>{d.activity}</strong> · {d.scheduledFor.toDate().toLocaleString()}
+              {d.status !== "scheduled" && <span className="muted"> · {d.status}</span>}
+            </span>
+            {d.status === "scheduled" && (
+              <button className="ghost" onClick={() => setStatus({ id: d.id, status: "cancelled" })}>
                 Cancel
               </button>
-            </li>
-          ))}
+            )}
+          </li>
+        ))}
       </ul>
     </section>
   );
