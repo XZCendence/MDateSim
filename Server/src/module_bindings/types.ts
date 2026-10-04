@@ -66,3 +66,11 @@ export const Player = __t.object("Player", {
 });
 export type Player = __Infer<typeof Player>;
 
+export const Presence = __t.object("Presence", {
+  player: __t.identity(),
+  inView: __t.bool(),
+  facing: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type Presence = __Infer<typeof Presence>;
+

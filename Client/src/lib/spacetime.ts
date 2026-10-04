@@ -72,6 +72,8 @@ export type MyRows = {
   demand: string | undefined;
   demandMet: boolean;
   phase: string;
+  /** This player's conversation, oldest first (texts and spoken IRL lines alike). */
+  messages: { id: bigint; role: string; text: string }[];
 };
 
 let rowsVersion = 0;
@@ -105,9 +107,22 @@ export function getMyRows(): MyRows {
       }
     }
   }
-  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase };
+  const messages =
+    conn && identityHex
+      ? [...conn.db.message.iter()]
+          .filter((m) => m.player.toHexString() === identityHex)
+          .sort((a, b) => (a.id < b.id ? -1 : 1))
+          .slice(-12)
+          .map((m) => ({ id: m.id, role: m.role, text: m.text }))
+      : [];
+  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase, messages };
   rowsCache = { version: rowsVersion, value };
   return value;
+}
+
+/** This browser's player identity (hex), once connected. */
+export function getIdentityHex(): string | undefined {
+  return identityHex;
 }
 
 export function subscribeSpacetime(listener: () => void): () => void {
@@ -138,7 +153,7 @@ export function getSpacetime(): DbConnection | undefined {
       c.db.gameSession.onInsert((ctx) => refresh(ctx.db));
       c.db.gameSession.onUpdate((ctx) => refresh(ctx.db));
       c.db.gameSession.onDelete((ctx) => refresh(ctx.db));
-      for (const table of [c.db.irlDate, c.db.affection, c.db.dateState]) {
+      for (const table of [c.db.irlDate, c.db.affection, c.db.dateState, c.db.message]) {
         table.onInsert(bumpRows);
         table.onUpdate(bumpRows);
         table.onDelete(bumpRows);
@@ -149,7 +164,13 @@ export function getSpacetime(): DbConnection | undefined {
           bumpRows();
         })
         .onError((ctx) => console.error("[spacetime] subscription error", ctx.event))
-        .subscribe([tables.gameSession, tables.irlDate, tables.affection, tables.dateState]);
+        .subscribe([
+          tables.gameSession,
+          tables.irlDate,
+          tables.affection,
+          tables.dateState,
+          tables.message.where((r) => r.player.eq(identity)),
+        ]);
     })
     .onConnectError((_c, err) => console.error("[spacetime] connect error", err))
     .build();

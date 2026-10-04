@@ -171,9 +171,20 @@ async function handleTts(request: Request, url: URL, origin: string | null): Pro
   }
 }
 
+/** Extra POST routes other modules mount on this server (e.g. the IRL director's /api/say). */
+export const routes = new Map<string, (request: Request, url: URL) => Promise<Response>>();
+
 async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
+  const extra = routes.get(url.pathname);
+  if (extra) {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    if (request.method !== "POST") return json(405, { error: "Use POST" }, origin);
+    const res = await extra(request, url);
+    for (const [k, v] of Object.entries(corsHeaders(origin))) res.headers.set(k, v);
+    return res;
+  }
   if (url.pathname === "/api/tts") {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
     return handleTts(request, url, origin);
@@ -200,7 +211,8 @@ async function handle(request: Request): Promise<Response> {
   return json(result.status, result.body, origin);
 }
 
-export function startUserRegistrationServer(): void {
+/** Starts the local API server. Returns false if another process already owns the port. */
+export function startUserRegistrationServer(): boolean {
   try {
     Bun.serve({
       port: PORT,
@@ -211,9 +223,10 @@ export function startUserRegistrationServer(): void {
     const code = err && typeof err === "object" && "code" in err ? (err as { code: unknown }).code : undefined;
     if (code === "EADDRINUSE") {
       console.log(`[users] already listening on http://127.0.0.1:${PORT}`);
-      return;
+      return false;
     }
     throw err;
   }
   console.log(`[users] listening on http://127.0.0.1:${PORT}`);
+  return true;
 }

@@ -10,7 +10,9 @@
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
     "imessage": "bun src/imessage.ts",
     "imessage:dev": "bun --watch src/imessage.ts",
-    "users": "bun src/users.ts"
+    "users": "bun src/users.ts",
+    "irl": "bun src/irl.ts",
+    "date": "bun src/irl.ts --texting"
   },
   "dependencies": {
     "spacetimedb": "2.10.*",

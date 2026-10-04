@@ -89,8 +89,24 @@ arms_length = pose(skeleton({J.LEFT_EAR: (560, 225), J.RIGHT_EAR: (440, 225)}),
                    depth={J.NOSE: 0.45, J.LEFT_SHOULDER: 0.75, J.RIGHT_SHOULDER: 0.75})
 results.append(check("leaning at arm's length is not a kiss", run(g.Kiss(), hold(arms_length, 1.0)), False))
 
+print("Look / Beg")
+turned_away = pose(skeleton({J.LEFT_SHOULDER: (450, 300), J.RIGHT_SHOULDER: (550, 300)}))
+head_turned = pose(skeleton({J.NOSE: (530, 230)}))
+results.append(check("facing camera", run(g.Look(), hold(standing, 1.5)), True))
+results.append(check("back turned", run(g.Look(), hold(turned_away, 1.5)), False))
+results.append(check("head turned aside", run(g.Look(), hold(head_turned, 1.5)), False))
+results.append(check("glance under 1s", run(g.Look(), hold(standing, 0.5)), False))
+kneel_pts = {J.LEFT_HIP: (535, 560), J.RIGHT_HIP: (465, 560), J.LEFT_KNEE: (535, 640), J.RIGHT_KNEE: (465, 640),
+             J.LEFT_ANKLE: (535, 650), J.RIGHT_ANKLE: (465, 650)}
+begging = pose(skeleton({**kneel_pts, J.LEFT_WRIST: (512, 400), J.RIGHT_WRIST: (488, 400),
+                         J.LEFT_ELBOW: (560, 430), J.RIGHT_ELBOW: (440, 430)}))
+standing_clasped = pose(skeleton({J.LEFT_WRIST: (512, 380), J.RIGHT_WRIST: (488, 380)}))
+results.append(check("kneeling, hands clasped", run(g.Beg(), hold(begging, 1.5)), True))
+results.append(check("kneeling, hands at sides", run(g.Beg(), hold(kneeling, 1.5)), False))
+results.append(check("standing, hands clasped", run(g.Beg(), hold(standing_clasped, 1.5)), False))
+
 print("Factory")
-results.append(check("make() knows every name", all(isinstance(g.make(n), g.Gesture) for n in g.DETECTORS), True))
+results.append(check("make() knows every name", all(isinstance(g.make(n), g.Gesture) for n in g.DATE_DETECTORS), True))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 raise SystemExit(0 if all(results) else 1)

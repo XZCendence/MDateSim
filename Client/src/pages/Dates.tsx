@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Timestamp } from "spacetimedb";
 import { useSession } from "../lib/session";
 import { getMyRows, getSpacetime, subscribeSpacetime } from "../lib/spacetime";
@@ -8,6 +8,7 @@ const ACTIVITIES = ["Coffee", "Dinner", "Arcade", "Park walk", "Movie night"];
 
 export default function Dates() {
   const session = useSession();
+  const navigate = useNavigate();
   const mine = useSyncExternalStore(subscribeSpacetime, getMyRows, getMyRows);
   const [when, setWhen] = useState("");
   const [activity, setActivity] = useState(ACTIVITIES[0]);
@@ -34,10 +35,12 @@ export default function Dates() {
     setWhen("");
   }
 
-  function setPhase(phase: "texting" | "irl") {
-    getSpacetime()?.reducers.setPhase({ phase }).catch((err: unknown) => {
-      console.error("[spacetime] setPhase failed", err);
-    });
+  /** Walk into the date: the full-screen page takes over and the date starts watching. */
+  function enter(id?: bigint) {
+    if (id !== undefined) {
+      getSpacetime()?.reducers.setIrlDateStatus({ id, status: "active" }).catch(() => {});
+    }
+    navigate("/date");
   }
 
   function cancel(id: bigint) {
@@ -57,11 +60,9 @@ export default function Dates() {
         When the date starts, {date.name} takes over. Stand in front of the Kinect and do what you're told.
       </p>
       <p className="row">
-        {mine.phase === "irl" ? (
-          <button className="ghost" onClick={() => setPhase("texting")}>End the IRL date</button>
-        ) : (
-          <button onClick={() => setPhase("irl")}>Start the IRL date now</button>
-        )}
+        <button onClick={() => enter()}>
+          {mine.phase === "irl" ? "Back to the date" : `Enter the date with ${date.name}`}
+        </button>
       </p>
       <p className="small">
         Affection: <strong>{mine.affection}</strong>
@@ -92,9 +93,14 @@ export default function Dates() {
               {d.status !== "scheduled" && <span className="muted"> · {d.status}</span>}
             </span>
             {d.status === "scheduled" && (
-              <button className="ghost" onClick={() => cancel(d.id)}>
-                Cancel
-              </button>
+              <span>
+                <button onClick={() => enter(d.id)} style={{ margin: 0 }}>
+                  {d.scheduledFor.toDate().getTime() <= Date.now() ? "It's time. Enter" : "Enter early"}
+                </button>
+                <button className="ghost" onClick={() => cancel(d.id)}>
+                  Cancel
+                </button>
+              </span>
             )}
           </li>
         ))}

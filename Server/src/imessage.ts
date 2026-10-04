@@ -4,6 +4,7 @@ import { imessage } from "@spectrum-ts/imessage";
 import { chat, type ChatMessage } from "./grok";
 import { DEFAULT_PERSONA, PERSONAS, personaFromIntro, type Persona } from "./personas";
 import { startUserRegistrationServer } from "./registerUser";
+import { formatDelta, splitReply } from "./reply";
 
 const personaById = (id: string): Persona => (PERSONAS as Record<string, Persona>)[id] ?? DEFAULT_PERSONA;
 import { connectSpacetime } from "./db";
@@ -175,42 +176,10 @@ function isTargetNotAllowed(err: unknown): boolean {
   return String(err).includes("Target not allowed for this project");
 }
 
-const DEMAND_TAG = /\[demand:([a-z_]+)\]/gi;
-const AFFECTION_TAG = /\[affection:\s*([+-]?\d+)\s*\]/gi;
-const AFFECTION_TAG_ANY = /\[affection:[^\]]*\]/gi;
-const I32_MIN = -2147483648;
-const I32_MAX = 2147483647;
-
-/** Keep a parsed delta inside i32 so the reducer accepts it. The score clamp is separate. */
-function clampDelta(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(I32_MIN, Math.min(I32_MAX, Math.trunc(n)));
-}
-
-function formatDelta(n: number): string {
-  return n > 0 ? `+${n}` : String(n);
-}
-
-/**
- * Pull [demand:x] and [affection:+N] tags off the reply, in either order.
- * A missing or junk affection tag is a delta of 0. The text is what gets sent.
- */
-function splitReply(reply: string): { text: string; demand?: string; affectionDelta: number } {
-  let affectionDelta = 0;
-  for (const m of reply.matchAll(AFFECTION_TAG)) {
-    affectionDelta = clampDelta(Number(m[1]));
-  }
-  let demand: string | undefined;
-  for (const m of reply.matchAll(DEMAND_TAG)) {
-    demand = m[1]!.toLowerCase();
-  }
-  const text = reply.replace(AFFECTION_TAG_ANY, "").replace(DEMAND_TAG, "").trim();
-  return { text, demand, affectionDelta };
-}
-
 // When the Kinect records a successful gesture, she reacts in the thread on her own.
 db.db.gestureEvent.onInsert(async (_ctx, event) => {
   if (!event.success) return;
+  if (db.db.dateState.player.find(event.player)?.phase === "irl") return; // the director reacts out loud
   const session = [...db.db.gameSession.iter()].find((s) => s.player.isEqual(event.player));
   if (!session?.spaceId) return;
   const persona = personaById(session.dateId);

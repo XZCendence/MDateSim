@@ -11,7 +11,7 @@ Talks to SpacetimeDB over its HTTP API (no Python SDK needed):
   POST /v1/database/<db>/call/<reducer>  JSON array of args
 
 Usage
-  python date_runner.py                 # follow whoever has an open demand (phase "irl" first)
+  python date_runner.py                 # follow whoever is on an IRL date (or has an open demand)
   python date_runner.py --player 0xc2…  # follow one player identity
   python date_runner.py --headless      # no window (just logs)
 
@@ -23,13 +23,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
+import threading
 import time
 import urllib.error
 import urllib.request
 
 import cv2
 
-from gestures import DETECTORS, Gesture, distance_m, make
+from gestures import DATE_DETECTORS, Gesture, distance_m, is_facing, make
 from kinect import Kinect
 from pose import PoseTracker, draw_pose
 from pose_stream import PoseStream
@@ -45,6 +47,8 @@ AFFECTION_FOR = {  # how much she warms up when you actually do it
     "heart": 12,
     "blow_kiss": 12,
     "kiss": 20,
+    "look": 5,
+    "beg": 18,
     "squat": 8,
     "still": 6,
     "wave": 5,
@@ -118,24 +122,74 @@ def record_gesture(player: str, gesture: str, success: bool) -> None:
             raise
 
 
-def current_demand(player: str | None) -> tuple[str | None, str | None, bool]:
-    """(player, demand, demand_met) for the player we're following, or (None, None, False).
+def follow(player: str | None) -> tuple[str | None, str | None]:
+    """(player, open_demand) for whoever we should watch, or (None, None).
 
-    With no --player we follow whoever has an open (unmet) demand, preferring anyone in
-    phase "irl". The texting loop sets demands whenever she asks, in either phase.
+    Preference: someone on an IRL date (even with no demand yet, so we can report presence),
+    then anyone with an open demand. `--player` pins it to one identity.
     """
     rows = sql("SELECT player, phase, demand, demand_met FROM date_state")
     if player:
         rows = [r for r in rows if r["player"] == player]
-    open_rows = [r for r in rows if r["demand"] and not r["demand_met"]]
-    open_rows.sort(key=lambda r: 0 if r["phase"] == "irl" else 1)
-    if open_rows:
-        r = open_rows[0]
-        return r["player"], r["demand"], False
-    if rows and player:
-        r = rows[0]
-        return r["player"], r["demand"] or None, bool(r["demand_met"])
-    return None, None, False
+    rows.sort(key=lambda r: (0 if r["phase"] == "irl" else 1, 0 if (r["demand"] and not r["demand_met"]) else 1))
+    for r in rows:
+        open_demand = r["demand"] if (r["demand"] and not r["demand_met"]) else None
+        if r["phase"] == "irl" or open_demand or player:
+            return r["player"], open_demand
+    return None, None
+
+
+class DbLink(threading.Thread):
+    """All SpacetimeDB traffic, off the camera thread: poll who to watch, push presence, record gestures."""
+
+    def __init__(self, pinned: str | None):
+        super().__init__(name="db-link", daemon=True)
+        self.pinned = pinned
+        self.player: str | None = None
+        self.demand: str | None = None
+        self._presence: tuple[bool, bool] = (False, False)
+        self._sent: tuple[str | None, bool, bool] | None = None
+        self._sent_at = 0.0
+        self._done: queue.Queue[tuple[str, str]] = queue.Queue()
+        self._skip: set[tuple[str, str]] = set()  # just-recorded demands, until the DB catches up
+
+    def set_presence(self, in_view: bool, facing: bool) -> None:
+        self._presence = (in_view, facing)
+
+    def gesture_done(self, player: str, demand: str) -> None:
+        self._skip.add((player, demand))
+        self.demand = None
+        self._done.put((player, demand))
+
+    def run(self) -> None:
+        while True:
+            try:
+                while True:
+                    player, demand = self._done.get_nowait()
+                    record_gesture(player, demand, True)
+            except queue.Empty:
+                pass
+            except Exception as err:
+                print(f"[runner] record_gesture failed: {err}")
+            try:
+                player, demand = follow(self.pinned)
+                if demand is None or (player, demand) not in self._skip:
+                    self._skip = {k for k in self._skip if k == (player, demand)}
+                    self.player, self.demand = player, demand
+                else:
+                    self.player, self.demand = player, None
+            except Exception as err:
+                print(f"[runner] poll failed: {err}")
+            try:
+                if self.player:
+                    now = time.monotonic()
+                    state = (self.player, *self._presence)
+                    if state != self._sent or now - self._sent_at > 2.0:
+                        call("report_presence", [identity_arg(self.player), self._presence[0], self._presence[1]])
+                        self._sent, self._sent_at = state, now
+            except Exception as err:
+                print(f"[runner] presence failed: {err}")
+            time.sleep(POLL_S)
 
 
 # ---------------------------------------------------------------- the loop ---
@@ -143,55 +197,46 @@ def current_demand(player: str | None) -> tuple[str | None, str | None, bool]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--player", help="identity hex (0x…) to follow; default: whoever is in phase 'irl'")
+    ap.add_argument("--player", help="identity hex (0x…) to follow; default: whoever is on an IRL date")
     ap.add_argument("--headless", action="store_true")
     args = ap.parse_args()
 
     print(f"[runner] {HOST} / {DB}")
     stream = PoseStream()  # live armature for the website (ws://127.0.0.1:8765)
     tracker = PoseTracker()
+    link = DbLink(args.player)
+    link.start()
     detector: Gesture | None = None
     active: tuple[str, str] | None = None  # (player, demand) we're currently detecting
-    last_poll = 0.0
-    show_depth = True
+    seen_at = 0.0  # last time a person was in frame (debounces presence flicker)
+    facing_at = 0.0
+    show_depth = False
 
     with Kinect() as kinect:
         while True:
-            now = time.monotonic()
-
-            # Ask the DB what she wants (cheap; twice a second).
-            if now - last_poll >= POLL_S:
-                last_poll = now
-                try:
-                    player, demand, met = current_demand(args.player)
-                except Exception as err:  # network blip: keep going with what we had
-                    print(f"[runner] poll failed: {err}")
-                    player, demand, met = (active[0], active[1], False) if active else (None, None, False)
-                wanted = (player, demand) if player and demand and not met and demand in DETECTORS else None
-                if wanted != active:
-                    active = wanted
-                    detector = make(active[1]) if active else None
-                    if active:
-                        print(f"[runner] {active[0][:10]}… she wants: {active[1]}")
-                    else:
-                        print("[runner] nothing demanded right now")
+            wanted = (link.player, link.demand) if link.player and link.demand in DATE_DETECTORS else None
+            if wanted != active:
+                active = wanted
+                detector = make(active[1]) if active else None
+                print(f"[runner] {active[0][:10]}… wants: {active[1]}" if active else "[runner] nothing demanded right now")
 
             frame = kinect.read()
             if frame is None:
                 continue
+            now = time.monotonic()
             pose = tracker.process(frame, kinect)
+            if pose is not None:
+                seen_at = now
+                if is_facing(pose):
+                    facing_at = now
+            link.set_presence(now - seen_at < 1.0, now - facing_at < 1.0)
             stream.publish(pose, demand=active[1] if active else None,
                            status=detector.status if detector else "", progress=detector.progress if detector else 0.0)
 
-            if detector is not None and active is not None and detector.update(pose):
-                player, demand = active
-                print(f"[runner] {demand} DONE -> record_gesture")
-                try:
-                    record_gesture(player, demand, True)
-                except RuntimeError as err:
-                    print(f"[runner] {err}")
+            if detector is not None and active is not None and detector.update(pose, now):
+                print(f"[runner] {active[1]} DONE -> record_gesture")
+                link.gesture_done(*active)
                 active, detector = None, None  # wait for the next demand
-                last_poll = 0.0
 
             if args.headless:
                 continue
@@ -203,8 +248,10 @@ def main() -> None:
                 draw_pose(image, pose)
             image = cv2.flip(image, 1)
             lines = [
-                f"demand: {active[1]}" if active else "waiting for her to ask for something…",
+                f"watching: {link.player[:12]}…" if link.player else "nobody is on a date",
+                f"demand: {active[1]}" if active else "waiting for a demand…",
                 f"status: {detector.status}" if detector else "",
+                f"in view: {now - seen_at < 1.0}   facing: {now - facing_at < 1.0}",
             ]
             if pose is not None:
                 d = distance_m(pose)

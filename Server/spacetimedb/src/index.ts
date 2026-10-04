@@ -10,6 +10,8 @@ import type { Identity } from 'spacetimedb';
 import { DATE_IDS } from './dateIds';
 const PHASES = ['texting', 'irl'] as const;
 const DEMANDS = [
+  'look',
+  'beg',
   'kneel',
   'bow',
   'jacks',
@@ -20,7 +22,7 @@ const DEMANDS = [
   'squat',
   'still',
   'wave',
-] as const; // keep in sync with Irl/gestures.py DETECTORS
+] as const; // keep in sync with Irl/gestures.py DATE_DETECTORS
 
 const player = table(
   { name: 'player', public: true },
@@ -97,6 +99,18 @@ const gestureEvent = table(
   }
 );
 
+// What the Kinect currently sees of a player on an IRL date. Written by Irl/date_runner.py,
+// read by the director (Server/src/director.ts) so the date knows you walked up or looked away.
+const presence = table(
+  { name: 'presence', public: true },
+  {
+    player: t.identity().primaryKey(),
+    inView: t.bool(),
+    facing: t.bool(),
+    updatedAt: t.timestamp(),
+  }
+);
+
 const spacetimedb = schema({
   player,
   gameSession,
@@ -105,6 +119,7 @@ const spacetimedb = schema({
   affection,
   irlDate,
   gestureEvent,
+  presence,
 });
 export default spacetimedb;
 
@@ -437,6 +452,39 @@ export const setDemandFor = spacetimedb.reducer(
     }
     requireDemand(demand);
     ctx.db.dateState.player.update({ ...state, demand, demandMet: false });
+  }
+);
+
+/**
+ * The player steps into the IRL date on the laptop. There is one Kinect, so this ends anyone
+ * else's IRL date, and it starts from a clean slate: no leftover demand.
+ */
+export const beginIrlDate = spacetimedb.reducer(ctx => {
+  const mine = requireDateState(ctx);
+  for (const row of [...ctx.db.dateState.iter()]) {
+    if (row.phase === 'irl' && !row.player.isEqual(ctx.sender)) {
+      ctx.db.dateState.player.update({ ...row, phase: 'texting', demand: undefined, demandMet: false });
+    }
+  }
+  ctx.db.dateState.player.update({ ...mine, phase: 'irl', demand: undefined, demandMet: false });
+});
+
+/** Leave the IRL date: back to texting, any open demand dropped. */
+export const endIrlDate = spacetimedb.reducer(ctx => {
+  const mine = requireDateState(ctx);
+  ctx.db.dateState.player.update({ ...mine, phase: 'texting', demand: undefined, demandMet: false });
+});
+
+/** Kinect heartbeat: is the player in frame, and are they facing the camera? */
+export const reportPresence = spacetimedb.reducer(
+  { player: t.identity(), inView: t.bool(), facing: t.bool() },
+  (ctx, { player, inView, facing }) => {
+    const row = ctx.db.presence.player.find(player);
+    if (row == null) {
+      ctx.db.presence.insert({ player, inView, facing, updatedAt: ctx.timestamp });
+    } else {
+      ctx.db.presence.player.update({ player, inView, facing, updatedAt: ctx.timestamp });
+    }
   }
 );
 

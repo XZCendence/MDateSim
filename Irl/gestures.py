@@ -539,14 +539,81 @@ class Kiss(Gesture):
 # -------------------------------------------------------------- the runner ---
 
 
+def is_facing(pose: Pose) -> bool:
+    """Body and head turned toward the camera (used for presence and the `look` demand)."""
+    if not pose.visible(Joint.NOSE, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
+        return False
+    ls, rs = pose.pixels[Joint.LEFT_SHOULDER], pose.pixels[Joint.RIGHT_SHOULDER]
+    # Facing the lens, the player's LEFT shoulder is on the image's right; back turned flips it.
+    if ls[0] <= rs[0]:
+        return False
+    sw = _shoulder_width(pose)
+    if pose.visible(Joint.LEFT_HIP, Joint.RIGHT_HIP) and sw < 0.45 * _torso_length(pose):
+        return False  # side-on: shoulders collapse to a sliver
+    if not pose.visible(Joint.LEFT_EAR, Joint.RIGHT_EAR):
+        return False  # head turned far enough to hide an ear
+    le, re = pose.pixels[Joint.LEFT_EAR], pose.pixels[Joint.RIGHT_EAR]
+    ear_w = max(abs(float(le[0] - re[0])), 1.0)
+    yaw = abs(float(pose.pixels[Joint.NOSE, 0]) - float(le[0] + re[0]) / 2) / ear_w
+    return yaw < 0.3
+
+
+class Look(Gesture):
+    """Look at her: face the camera and hold it."""
+
+    name = "look"
+    hold_s = 1.0
+
+    def _check(self, pose: Pose, now: float) -> bool:
+        facing = is_facing(pose)
+        self.score = 1.0 if facing else 0.0
+        self.status = "eyes on me" if facing else "look at me"
+        return facing
+
+
+class Beg(Gesture):
+    """On your knees with your hands clasped in front of you."""
+
+    name = "beg"
+    hold_s = 1.0
+
+    def reset(self) -> None:
+        super().reset()
+        self._kneel = Kneel()
+
+    def _check(self, pose: Pose, now: float) -> bool:
+        kneeling = self._kneel._check(pose, now)
+        if not pose.visible(Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.NOSE, Joint.LEFT_HIP, Joint.RIGHT_HIP):
+            self.status = "hands where I can see them"
+            self.score = 0.3 * self._kneel.score
+            return False
+        sw = _shoulder_width(pose)
+        wl, wr = pose.pixels[Joint.LEFT_WRIST], pose.pixels[Joint.RIGHT_WRIST]
+        gap = float(np.linalg.norm(wl - wr)) / sw
+        mid_y = float(wl[1] + wr[1]) / 2
+        hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
+        raised = mid_y < hip_y - 0.2 * sw  # in front of the chest or face, not hanging at the sides
+        clasped = gap < 0.55 and raised
+        self.score = self._kneel.score * (0.3 + 0.7 * _ramp(gap, 1.4, 0.55) * (1.0 if raised else 0.3))
+        if not kneeling:
+            self.status = "on your knees first"
+            return False
+        if not clasped:
+            self.status = "hands together. beg."
+            return False
+        self.status = "begging"
+        return True
+
+
 def make(name: str, **kwargs) -> Gesture:
     """Build a detector by demand name (as stored in SpacetimeDB's date_state.demand)."""
-    cls = DETECTORS.get(name)
+    cls = DATE_DETECTORS.get(name)
     if cls is None:
-        raise KeyError(f"unknown demand {name!r}; known: {sorted(DETECTORS)}")
+        raise KeyError(f"unknown demand {name!r}; known: {sorted(DATE_DETECTORS)}")
     return cls(**kwargs)
 
 
+# The classifier / pose lab set: mutually exclusive body poses.
 DETECTORS: dict[str, type[Gesture]] = {
     Kneel.name: Kneel,
     Bow.name: Bow,
@@ -556,6 +623,10 @@ DETECTORS: dict[str, type[Gesture]] = {
     BlowKiss.name: BlowKiss,
     Kiss.name: Kiss,
 }
+
+# Everything the date can demand. `look` and `beg` overlap other poses (you can face the camera
+# while doing anything; begging is a kneel), so they stay out of the classifier set.
+DATE_DETECTORS: dict[str, type[Gesture]] = {**DETECTORS, Look.name: Look, Beg.name: Beg}
 
 
 @dataclass

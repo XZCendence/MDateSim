@@ -7,15 +7,18 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AdjustAffectionReducer from "../adjust_affection_reducer";
+import BeginIrlDateReducer from "../begin_irl_date_reducer";
 import ClaimLatestSessionReducer from "../claim_latest_session_reducer";
 import ClaimSessionReducer from "../claim_session_reducer";
 import ClearDemandReducer from "../clear_demand_reducer";
 import ClearMessagesReducer from "../clear_messages_reducer";
 import ClearSessionReducer from "../clear_session_reducer";
+import EndIrlDateReducer from "../end_irl_date_reducer";
 import LogMessageReducer from "../log_message_reducer";
 import MarkDemandMetReducer from "../mark_demand_met_reducer";
 import PickDateReducer from "../pick_date_reducer";
 import RecordGestureReducer from "../record_gesture_reducer";
+import ReportPresenceReducer from "../report_presence_reducer";
 import ScheduleIrlDateReducer from "../schedule_irl_date_reducer";
 import SetDemandReducer from "../set_demand_reducer";
 import SetDemandForReducer from "../set_demand_for_reducer";
@@ -24,15 +27,18 @@ import SetPhaseReducer from "../set_phase_reducer";
 import UnlinkSpaceReducer from "../unlink_space_reducer";
 
 export type AdjustAffectionParams = __Infer<typeof AdjustAffectionReducer>;
+export type BeginIrlDateParams = __Infer<typeof BeginIrlDateReducer>;
 export type ClaimLatestSessionParams = __Infer<typeof ClaimLatestSessionReducer>;
 export type ClaimSessionParams = __Infer<typeof ClaimSessionReducer>;
 export type ClearDemandParams = __Infer<typeof ClearDemandReducer>;
 export type ClearMessagesParams = __Infer<typeof ClearMessagesReducer>;
 export type ClearSessionParams = __Infer<typeof ClearSessionReducer>;
+export type EndIrlDateParams = __Infer<typeof EndIrlDateReducer>;
 export type LogMessageParams = __Infer<typeof LogMessageReducer>;
 export type MarkDemandMetParams = __Infer<typeof MarkDemandMetReducer>;
 export type PickDateParams = __Infer<typeof PickDateReducer>;
 export type RecordGestureParams = __Infer<typeof RecordGestureReducer>;
+export type ReportPresenceParams = __Infer<typeof ReportPresenceReducer>;
 export type ScheduleIrlDateParams = __Infer<typeof ScheduleIrlDateReducer>;
 export type SetDemandParams = __Infer<typeof SetDemandReducer>;
 export type SetDemandForParams = __Infer<typeof SetDemandForReducer>;

@@ -35,15 +35,18 @@ import {
 
 // Import all reducer arg schemas
 import AdjustAffectionReducer from "./adjust_affection_reducer";
+import BeginIrlDateReducer from "./begin_irl_date_reducer";
 import ClaimLatestSessionReducer from "./claim_latest_session_reducer";
 import ClaimSessionReducer from "./claim_session_reducer";
 import ClearDemandReducer from "./clear_demand_reducer";
 import ClearMessagesReducer from "./clear_messages_reducer";
 import ClearSessionReducer from "./clear_session_reducer";
+import EndIrlDateReducer from "./end_irl_date_reducer";
 import LogMessageReducer from "./log_message_reducer";
 import MarkDemandMetReducer from "./mark_demand_met_reducer";
 import PickDateReducer from "./pick_date_reducer";
 import RecordGestureReducer from "./record_gesture_reducer";
+import ReportPresenceReducer from "./report_presence_reducer";
 import ScheduleIrlDateReducer from "./schedule_irl_date_reducer";
 import SetDemandReducer from "./set_demand_reducer";
 import SetDemandForReducer from "./set_demand_for_reducer";
@@ -61,6 +64,7 @@ import GestureEventRow from "./gesture_event_table";
 import IrlDateRow from "./irl_date_table";
 import MessageRow from "./message_table";
 import PlayerRow from "./player_table";
+import PresenceRow from "./presence_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -152,20 +156,34 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  presence: __table({
+    name: 'presence',
+    indexes: [
+      { accessor: 'player', name: 'presence_player_idx_btree', algorithm: 'btree', columns: [
+        'player',
+      ] },
+    ],
+    constraints: [
+      { name: 'presence_player_key', constraint: 'unique', columns: ['player'] },
+    ],
+  }, PresenceRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("adjust_affection", AdjustAffectionReducer),
+  __reducerSchema("begin_irl_date", BeginIrlDateReducer),
   __reducerSchema("claim_latest_session", ClaimLatestSessionReducer),
   __reducerSchema("claim_session", ClaimSessionReducer),
   __reducerSchema("clear_demand", ClearDemandReducer),
   __reducerSchema("clear_messages", ClearMessagesReducer),
   __reducerSchema("clear_session", ClearSessionReducer),
+  __reducerSchema("end_irl_date", EndIrlDateReducer),
   __reducerSchema("log_message", LogMessageReducer),
   __reducerSchema("mark_demand_met", MarkDemandMetReducer),
   __reducerSchema("pick_date", PickDateReducer),
   __reducerSchema("record_gesture", RecordGestureReducer),
+  __reducerSchema("report_presence", ReportPresenceReducer),
   __reducerSchema("schedule_irl_date", ScheduleIrlDateReducer),
   __reducerSchema("set_demand", SetDemandReducer),
   __reducerSchema("set_demand_for", SetDemandForReducer),
