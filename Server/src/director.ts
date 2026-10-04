@@ -38,6 +38,7 @@ const PRESENCE_FRESH_MS = 6000;
 const NAG_EVERY_MS = 10_000;
 const MAX_NAGS = 2;
 const GIVE_UP_MS = 38_000;
+const ABANDONED_MS = 60_000; // out of the camera's view this long = they left; end the date
 const HISTORY_LIMIT = 24;
 
 interface DateRun {
@@ -141,6 +142,8 @@ read them aloud or mention the camera system. End every line with an affection t
       const { text: rawText, demand, affectionDelta } = splitReply(raw);
       const text = rawText.replace(/\s*\n+\s*/g, " ").trim(); // one subtitle, one utterance
       if (!text) return;
+      // The date may have ended while Grok was thinking (tab closed); don't speak into the void.
+      if (db.db.dateState.player.find(player)?.phase !== "irl") return;
       await db.reducers.logMessage({ player, role: "assistant", text });
       if (affectionDelta !== 0) {
         db.reducers.adjustAffection({ player, delta: affectionDelta }).catch(() => {});
@@ -201,6 +204,11 @@ read them aloud or mention the camera system. End every line with an affection t
 
     if (pres.known && !pres.inView) {
       run.outOfViewSince ??= now;
+      if (now - run.outOfViewSince > ABANDONED_MS) {
+        console.log(`[date ${player.toHexString().slice(0, 10)}] out of view for a minute, ending the date`);
+        await db.reducers.endIrlDateFor({ player }).catch((err) => console.warn("endIrlDateFor:", String(err)));
+        return;
+      }
       if (!run.saidLeft && now - run.outOfViewSince > 4000) {
         run.saidLeft = true;
         return say(player, run, "They walked out of your sight in the middle of the date. React. No demand tag.");

@@ -111,6 +111,8 @@ class Gesture:
 
     name = "gesture"
     hold_s = 0.0  # how long the condition must stay true
+    # Optional per-frame probabilities from the learned model (dino.Head), set by the caller.
+    hint: dict[str, float] = {}
 
     def __init__(self):
         self.reset()
@@ -157,38 +159,57 @@ class Gesture:
 
 
 class Kneel(Gesture):
-    """Hips dropped to knee height with the shins flat on the floor."""
+    """Knees on the floor: either upright (thighs vertical) or sitting back on the heels.
+
+    The tell is the shins. Standing or squatting, the ankles sit a full shin-length below the
+    knees in the image. Kneeling, the shins lie on the floor pointing away from the camera, so
+    the ankles collapse to knee height (or vanish behind the knees). Hip height alone is not
+    enough: an upright kneel keeps the hips a full thigh above the knees.
+
+    If the learned model is available (see `hint`), a confident "kneel" from it also counts.
+    """
 
     name = "kneel"
     hold_s = 0.6
+    LEARNED_MIN = 0.7
 
     def _check(self, pose: Pose, now: float) -> bool:
-        if not pose.visible(Joint.LEFT_HIP, Joint.RIGHT_HIP, Joint.LEFT_KNEE, Joint.RIGHT_KNEE, *TORSO[:2]):
+        learned = float(self.hint.get("kneel", 0.0))
+        legs = pose.visible(Joint.LEFT_HIP, Joint.RIGHT_HIP, Joint.LEFT_KNEE, Joint.RIGHT_KNEE, *TORSO[:2])
+        if not legs:
+            self.score = learned
+            if learned >= self.LEARNED_MIN:
+                self.status = "kneeling"
+                return True
             self.status = "can't see your legs"
-            self.score = 0.0
             return False
-        torso = _torso_length(pose)
+        torso = max(_torso_length(pose), 1.0)
         hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
         knee_y = _mid(pose, Joint.LEFT_KNEE, Joint.RIGHT_KNEE)[1]
-        drop = (knee_y - hip_y) / max(torso, 1.0)
-        hips_down = drop < 0.45  # standing: roughly 1.0-1.3 torso lengths
-        s_drop = _ramp(drop, 1.1, 0.45)
-        s_ankle = 1.0
-        if pose.visible(Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE):
-            shin = (_mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1] - knee_y) / max(torso, 1.0)
-            s_ankle = _ramp(shin, 0.8, 0.35)
-        self.score = s_drop * (0.4 + 0.6 * s_ankle)
-        if not hips_down:
-            self.status = "get lower"
-            return False
-        # Kneeling puts the ankles level with (or hidden behind) the knees; a squat keeps them well below.
-        if pose.visible(Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE):
-            ankle_y = _mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1]
-            if (ankle_y - knee_y) > 0.35 * torso:
-                self.status = "that's a squat, knees on the floor"
-                return False
-        self.status = "kneeling"
-        return True
+        drop = (knee_y - hip_y) / torso  # standing ~1.0, upright kneel ~0.8-1.0, sitting on heels < 0.45
+        ankles = bool(self._ankle_vis(pose) > 0.3)
+        shin = (_mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1] - knee_y) / torso if ankles else None
+
+        sat_back = drop < 0.45 and (shin is None or shin < 0.35)
+        upright = shin is not None and shin < 0.3
+        s_shin = _ramp(shin, 0.8, 0.3) if shin is not None else 0.0
+        s_sat = _ramp(drop, 1.1, 0.45) * (0.4 + 0.6 * (s_shin if shin is not None else 1.0))
+        self.score = max(s_shin, s_sat, learned)
+
+        if sat_back or upright or learned >= self.LEARNED_MIN:
+            self.status = "kneeling"
+            return True
+        if drop < 0.45:
+            self.status = "that's a squat, knees on the floor"
+        elif shin is None:
+            self.status = "step back, I need to see your feet"
+        else:
+            self.status = "knees on the floor"
+        return False
+
+    @staticmethod
+    def _ankle_vis(pose: Pose) -> float:
+        return float(min(pose.visibility[Joint.LEFT_ANKLE], pose.visibility[Joint.RIGHT_ANKLE]))
 
 
 class Bow(Gesture):
@@ -582,6 +603,7 @@ class Beg(Gesture):
         self._kneel = Kneel()
 
     def _check(self, pose: Pose, now: float) -> bool:
+        self._kneel.hint = self.hint
         kneeling = self._kneel._check(pose, now)
         if not pose.visible(Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.NOSE, Joint.LEFT_HIP, Joint.RIGHT_HIP):
             self.status = "hands where I can see them"

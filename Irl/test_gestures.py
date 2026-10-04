@@ -9,6 +9,13 @@ results.append(check("standing", run(g.Kneel(), hold(standing, 1.0)), False))
 results.append(check("kneeling 1s", run(g.Kneel(), hold(kneeling, 1.0)), True))
 results.append(check("kneeling 0.3s only", run(g.Kneel(), hold(kneeling, 0.3)), False))
 results.append(check("squat is not kneel", run(g.Kneel(), hold(squatting, 1.0)), False))
+upright_kneel = pose(skeleton({J.LEFT_KNEE: (535, 620), J.RIGHT_KNEE: (465, 620),
+                               J.LEFT_ANKLE: (535, 632), J.RIGHT_ANKLE: (465, 632)}))
+results.append(check("upright kneel (thighs vertical)", run(g.Kneel(), hold(upright_kneel, 1.0)), True))
+feet_cropped = pose(skeleton(), hide=(J.LEFT_ANKLE, J.RIGHT_ANKLE))
+results.append(check("standing with feet out of frame", run(g.Kneel(), hold(feet_cropped, 1.0)), False))
+hinted = g.Kneel(); hinted.hint = {"kneel": 0.9}
+results.append(check("learned model says kneel", run(hinted, hold(feet_cropped, 1.0)), True))
 
 print("Bow")
 shallow = pose(skeleton(), tilt_deg=20)

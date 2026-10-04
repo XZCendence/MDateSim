@@ -28,6 +28,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import cv2
 
@@ -139,6 +140,48 @@ def follow(player: str | None) -> tuple[str | None, str | None]:
     return None, None
 
 
+STOP_FILE = Path(__file__).parent / ".stop"  # touch this to make the runner exit cleanly
+LEARNED_HELPS = {"kneel", "beg"}  # demands where the learned model is consulted
+EMBED_EVERY_S = 0.1
+
+
+class Learned(threading.Thread):
+    """Loads the DINOv2 embedder + trained head in the background (it takes a while).
+
+    Only used if the head was trained with an "idle" class; without one it cannot say
+    "none of the above" and would see a kneel in someone standing still.
+    """
+
+    def __init__(self):
+        super().__init__(name="learned", daemon=True)
+        self.ready = False
+        self.embedder = None
+        self.head = None
+
+    def run(self) -> None:
+        try:
+            from dino import DinoEmbedder, Head
+
+            head = Head.load()
+            if head is None:
+                print("[runner] no trained head (Irl/data/head.pkl); geometry only")
+                return
+            if "idle" not in head.classes:
+                print(f"[runner] trained head has no 'idle' class ({head.classes}); geometry only. "
+                      "Record idle in pose_lab.py (hold 0), press t, and restart.")
+                return
+            self.embedder, self.head = DinoEmbedder(), head
+            self.ready = True
+            print(f"[runner] learned model ready: {head.classes}")
+        except Exception as err:
+            print(f"[runner] learned model unavailable ({err}); geometry only")
+
+    def probs(self, frame, pose) -> dict[str, float]:
+        from dino import person_bbox
+
+        return self.head.predict_proba(self.embedder.embed(frame.color, person_bbox(pose, frame.color.shape)))
+
+
 class DbLink(threading.Thread):
     """All SpacetimeDB traffic, off the camera thread: poll who to watch, push presence, record gestures."""
 
@@ -206,6 +249,10 @@ def main() -> None:
     tracker = PoseTracker()
     link = DbLink(args.player)
     link.start()
+    learned = Learned()
+    learned.start()
+    last_embed = 0.0
+    STOP_FILE.unlink(missing_ok=True)
     detector: Gesture | None = None
     active: tuple[str, str] | None = None  # (player, demand) we're currently detecting
     seen_at = 0.0  # last time a person was in frame (debounces presence flicker)
@@ -220,11 +267,22 @@ def main() -> None:
                 detector = make(active[1]) if active else None
                 print(f"[runner] {active[0][:10]}… wants: {active[1]}" if active else "[runner] nothing demanded right now")
 
+            if STOP_FILE.exists():
+                STOP_FILE.unlink(missing_ok=True)
+                print("[runner] stop requested, closing the Kinect cleanly")
+                break
+
             frame = kinect.read()
             if frame is None:
                 continue
             now = time.monotonic()
             pose = tracker.process(frame, kinect)
+            if detector is not None and active is not None and learned.ready and active[1] in LEARNED_HELPS:
+                if pose is None:
+                    detector.hint = {}
+                elif now - last_embed >= EMBED_EVERY_S:
+                    last_embed = now
+                    detector.hint = learned.probs(frame, pose)
             if pose is not None:
                 seen_at = now
                 if is_facing(pose):

@@ -42,6 +42,7 @@ import ClearDemandReducer from "./clear_demand_reducer";
 import ClearMessagesReducer from "./clear_messages_reducer";
 import ClearSessionReducer from "./clear_session_reducer";
 import EndIrlDateReducer from "./end_irl_date_reducer";
+import EndIrlDateForReducer from "./end_irl_date_for_reducer";
 import LogMessageReducer from "./log_message_reducer";
 import MarkDemandMetReducer from "./mark_demand_met_reducer";
 import PickDateReducer from "./pick_date_reducer";
@@ -179,6 +180,7 @@ const reducersSchema = __reducers(
   __reducerSchema("clear_messages", ClearMessagesReducer),
   __reducerSchema("clear_session", ClearSessionReducer),
   __reducerSchema("end_irl_date", EndIrlDateReducer),
+  __reducerSchema("end_irl_date_for", EndIrlDateForReducer),
   __reducerSchema("log_message", LogMessageReducer),
   __reducerSchema("mark_demand_met", MarkDemandMetReducer),
   __reducerSchema("pick_date", PickDateReducer),

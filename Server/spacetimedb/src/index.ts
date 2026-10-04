@@ -179,8 +179,13 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
   }
 });
 
-export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {
-  // Leave the player row in place.
+export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
+  // Leave the player row in place. But a closed tab, crashed browser, or sleeping laptop must
+  // not leave the date talking to an empty room: walking away ends the IRL date.
+  const state = ctx.db.dateState.player.find(ctx.sender);
+  if (state != null && state.phase === 'irl') {
+    ctx.db.dateState.player.update({ ...state, phase: 'texting', demand: undefined, demandMet: false });
+  }
 });
 
 /**
@@ -473,6 +478,14 @@ export const beginIrlDate = spacetimedb.reducer(ctx => {
 export const endIrlDate = spacetimedb.reducer(ctx => {
   const mine = requireDateState(ctx);
   ctx.db.dateState.player.update({ ...mine, phase: 'texting', demand: undefined, demandMet: false });
+});
+
+/** The director ends a date on the player's behalf (e.g. they walked off and never came back). */
+export const endIrlDateFor = spacetimedb.reducer({ player: t.identity() }, (ctx, { player }) => {
+  const state = ctx.db.dateState.player.find(player);
+  if (state != null && state.phase === 'irl') {
+    ctx.db.dateState.player.update({ ...state, phase: 'texting', demand: undefined, demandMet: false });
+  }
 });
 
 /** Kinect heartbeat: is the player in frame, and are they facing the camera? */

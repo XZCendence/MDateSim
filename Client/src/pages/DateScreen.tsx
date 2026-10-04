@@ -27,7 +27,7 @@ const DEMAND_LABEL: Record<string, string> = {
   kiss: "Lean in for a kiss",
 };
 
-const TYPE_MS = 32;
+const TYPE_MS = 32; // fallback typing speed when there is no audio to pace against
 
 export default function DateScreen() {
   const session = useSession();
@@ -48,6 +48,7 @@ export default function DateScreen() {
   const queue = useRef<{ id: bigint; text: string }[]>([]);
   const playing = useRef(false);
   const recorder = useRef<MediaRecorder | null>(null);
+  const typeMs = useRef(TYPE_MS); // per-character delay for the current line
   const dateId = session?.dateId;
 
   // ---- speaking: play queued lines one at a time, subtitle in step with the voice ----
@@ -56,31 +57,48 @@ export default function DateScreen() {
     const next = queue.current.shift();
     if (!next || !dateId) return;
     playing.current = true;
-    setLine(next);
-    setShown(0);
-    setSpeaking(true);
+    // The subtitle starts with the voice and is paced to finish with it, so you never read
+    // the whole line before hearing it.
+    const begin = (seconds?: number) => {
+      const chars = Math.max(next.text.length, 1);
+      typeMs.current = seconds ? Math.max(14, Math.min(110, (seconds * 1000 * 0.92) / chars)) : TYPE_MS;
+      setLine(next);
+      setShown(0);
+      setSpeaking(true);
+    };
     const done = () => {
       playing.current = false;
       setSpeaking(false);
       playNext();
     };
+    const silent = () => {
+      begin();
+      window.setTimeout(done, 1200 + next.text.length * 60);
+    };
     const el = audio.current;
-    if (!el) return void window.setTimeout(done, 1200 + next.text.length * 60);
+    if (!el) return silent();
     fetch(`/api/tts?dateId=${encodeURIComponent(dateId)}&text=${encodeURIComponent(next.text)}`)
       .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(`tts ${res.status}`))))
       .then((blob) => {
         const url = URL.createObjectURL(blob);
+        let started = false;
         el.src = url;
+        el.onplaying = () => {
+          if (started) return;
+          started = true;
+          // MP3 blobs sometimes report no duration; ~16 kB per second is close enough.
+          begin(Number.isFinite(el.duration) && el.duration > 0 ? el.duration : blob.size / 16000);
+        };
         el.onended = () => {
           URL.revokeObjectURL(url);
           done();
         };
-        el.onerror = done;
+        el.onerror = () => (started ? done() : silent());
         return el.play();
       })
       .catch((err) => {
         console.warn("[date] voice unavailable, subtitles only:", err);
-        window.setTimeout(done, 1200 + next.text.length * 60);
+        silent();
       });
   }, [dateId]);
 
@@ -99,7 +117,7 @@ export default function DateScreen() {
   // Typewriter.
   useEffect(() => {
     if (!line || shown >= line.text.length) return;
-    const t = window.setTimeout(() => setShown((n) => n + 1), TYPE_MS);
+    const t = window.setTimeout(() => setShown((n) => n + 1), typeMs.current);
     return () => window.clearTimeout(t);
   }, [line, shown]);
 
