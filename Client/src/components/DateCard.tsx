@@ -6,11 +6,9 @@ interface Props {
   date: DateProfile;
   onPick: (date: DateProfile) => void;
   selected?: boolean;
-  /** Overrides the default "Ask her out" / "Continue with" label. */
-  buttonLabel?: string;
 }
 
-export default function DateCard({ date, onPick, selected = false, buttonLabel }: Props) {
+export default function DateCard({ date, onPick, selected = false }: Props) {
   const [hovered, setHovered] = useState(false);
   const src = hovered && date.hoverImage ? date.hoverImage : date.image;
 
@@ -36,7 +34,7 @@ export default function DateCard({ date, onPick, selected = false, buttonLabel }
         className="date-hitzone"
         role="button"
         tabIndex={0}
-        aria-label={buttonLabel ?? `Ask ${date.name} out`}
+        aria-label={`Ask ${date.name} out`}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={() => onPick(date)}
@@ -50,7 +48,6 @@ export default function DateCard({ date, onPick, selected = false, buttonLabel }
       <div className="char-tooltip">
         <h2>{date.name}</h2>
         <p>{date.bio}</p>
-        {buttonLabel && <p className="small">{buttonLabel}</p>}
       </div>
     </div>
   );
