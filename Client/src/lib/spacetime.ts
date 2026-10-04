@@ -60,6 +60,25 @@ function timestampIso(timestamp: { microsSinceUnixEpoch: bigint }): string {
   return new Date(Number(timestamp.microsSinceUnixEpoch / 1000n)).toISOString();
 }
 
+function sessionFor(
+  db: {
+    gameSession: {
+      iter(): Iterable<{
+        player: { toHexString(): string };
+        dateId: string;
+        startedAt: { microsSinceUnixEpoch: bigint };
+      }>;
+    };
+  },
+  playerHex: string | undefined,
+): { dateId: string; startedAt: { microsSinceUnixEpoch: bigint } } | undefined {
+  if (!playerHex) return undefined;
+  for (const row of db.gameSession.iter()) {
+    if (row.player.toHexString() === playerHex) return row;
+  }
+  return undefined;
+}
+
 function refresh(db: {
   gameSession: {
     iter(): Iterable<{
@@ -70,13 +89,7 @@ function refresh(db: {
   };
 }): void {
   if (!identityHex) return;
-  let mine: { dateId: string; startedAt: { microsSinceUnixEpoch: bigint } } | undefined;
-  for (const row of db.gameSession.iter()) {
-    if (row.player.toHexString() === identityHex) {
-      mine = row;
-      break;
-    }
-  }
+  const mine = sessionFor(db, focusPlayerHex()) ?? sessionFor(db, identityHex);
   setSnapshot({
     ready: true,
     dateId: mine?.dateId ?? null,
@@ -128,15 +141,19 @@ function messagesFor(playerHex: string): { id: bigint; role: string; text: strin
     .map((m) => ({ id: m.id, role: m.role, text: m.text }));
 }
 
-/** Newest linked iMessage thread's player, if this browser isn't that player. */
-function latestLinkedPlayerHex(except?: string): string | undefined {
-  if (!conn) return undefined;
+/** Player whose thread the laptop should mirror (this tab, or the newest linked one). */
+function focusPlayerHex(): string | undefined {
+  if (!conn) return identityHex;
+  if (identityHex && messagesFor(identityHex).length > 0) return identityHex;
+  if (identityHex) {
+    for (const g of conn.db.gameSession.iter()) {
+      if (g.player.toHexString() === identityHex && hasSpaceId(g.spaceId)) return identityHex;
+    }
+  }
   const linked = new Set<string>();
   for (const g of conn.db.gameSession.iter()) {
     if (hasSpaceId(g.spaceId)) linked.add(g.player.toHexString());
   }
-  linked.delete(except ?? "");
-  if (linked.size === 0) return undefined;
   let best: { player: string; t: bigint } | undefined;
   for (const m of conn.db.message.iter()) {
     const player = m.player.toHexString();
@@ -144,25 +161,26 @@ function latestLinkedPlayerHex(except?: string): string | undefined {
     const t = m.sentAt.microsSinceUnixEpoch;
     if (!best || t > best.t) best = { player, t };
   }
-  return best?.player;
+  return best?.player ?? identityHex;
 }
 
 export function getMyRows(): MyRows {
   if (rowsCache?.version === rowsVersion) return rowsCache.value;
+  const focus = focusPlayerHex();
   let affection = 0;
   let demand: string | undefined;
   let demandMet = false;
   let phase = "texting";
   let linked = false;
-  if (conn && identityHex) {
+  if (conn && focus) {
     for (const g of conn.db.gameSession.iter()) {
-      if (g.player.toHexString() === identityHex) linked = hasSpaceId(g.spaceId);
+      if (g.player.toHexString() === focus) linked = hasSpaceId(g.spaceId);
     }
     for (const a of conn.db.affection.iter()) {
-      if (a.player.toHexString() === identityHex) affection = a.value;
+      if (a.player.toHexString() === focus) affection = a.value;
     }
     for (const d of conn.db.dateState.iter()) {
-      if (d.player.toHexString() === identityHex) {
+      if (d.player.toHexString() === focus) {
         demand = d.demand;
         demandMet = d.demandMet;
         phase = d.phase;
@@ -170,7 +188,7 @@ export function getMyRows(): MyRows {
     }
   }
   const messages = identityHex ? messagesFor(identityHex) : [];
-  const liveMessages = messages.length > 0 ? messages : messagesFor(latestLinkedPlayerHex(identityHex) ?? "");
+  const liveMessages = messages.length > 0 ? messages : messagesFor(focus ?? "");
   const value: MyRows = {
     irlDates: readIrlDates(),
     affection,

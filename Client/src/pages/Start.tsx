@@ -82,11 +82,23 @@ export default function Start() {
   const chatting = chat.length > 0;
   const step = chatting ? 3 : !savedPhone || error ? 1 : 2;
   const first = date.name.split(" ")[0];
+  const hearts = Math.max(0, Math.min(100, (mine.affection + 100) / 2));
 
   return (
     <div className="start" style={{ backgroundImage: `url(${bgUrl})`, ["--accent" as string]: date.accent }}>
       <div className="start-shade" />
       {date.image && <img src={date.image} alt={date.name} className="start-sprite" />}
+
+      <div className="start-hud" title={`Affection ${mine.affection}`}>
+        <span className="start-hud-label">Affection</span>
+        <div className="start-affection">
+          <span aria-hidden>♥</span>
+          <div className="start-affection-track">
+            <div className="start-affection-fill" style={{ width: `${hearts}%` }} />
+          </div>
+          <span className="start-affection-num">{mine.affection}</span>
+        </div>
+      </div>
 
       <div className="start-card">
         <Link to="/lobby" className="start-back">← Pick someone else</Link>
