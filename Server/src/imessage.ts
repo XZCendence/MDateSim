@@ -65,7 +65,7 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
 }
 
 function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean, phase = "texting"): string {
-  let s = `${persona.system}\n\nYour current affection for the player is ${affection} on a scale of -100 to 100. Let it color your tone.`;
+  let s = `${persona.system}\n\nYour current affection for the player is ${affection} on a scale of -100 to 100. Let it color your tone. The affection tag is the change from this message, added to that score. The score stays between -100 and 100, but the change itself is not capped: +200 from -100 lands at 100, and -200 from 100 lands at -100. Match the size of the change to how the message actually felt.`;
   if (phase === "irl") {
     s += `\nYou are on an IRL date right now: the player is standing in front of the camera. Be bold and physical; ask them to do things with a demand tag early and often (every message or two), and escalate.`;
   } else {
@@ -79,13 +79,37 @@ function buildSystem(persona: Persona, affection: number, demand: string | undef
   return s;
 }
 
-const DEMAND_TAG = /\s*\[demand:([a-z_]+)\]\s*$/i;
+const DEMAND_TAG = /\[demand:([a-z_]+)\]/gi;
+const AFFECTION_TAG = /\[affection:\s*([+-]?\d+)\s*\]/gi;
+const AFFECTION_TAG_ANY = /\[affection:[^\]]*\]/gi;
+const I32_MIN = -2147483648;
+const I32_MAX = 2147483647;
 
-/** Pull a trailing [demand:x] tag off the reply. Returns the clean text and the demand, if any. */
-function splitDemand(reply: string): { text: string; demand?: string } {
-  const m = DEMAND_TAG.exec(reply);
-  if (!m) return { text: reply };
-  return { text: reply.replace(DEMAND_TAG, "").trim(), demand: m[1]!.toLowerCase() };
+/** Keep a parsed delta inside i32 so the reducer accepts it. The score clamp is separate. */
+function clampDelta(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(I32_MIN, Math.min(I32_MAX, Math.trunc(n)));
+}
+
+function formatDelta(n: number): string {
+  return n > 0 ? `+${n}` : String(n);
+}
+
+/**
+ * Pull [demand:x] and [affection:+N] tags off the reply, in either order.
+ * A missing or junk affection tag is a delta of 0. The text is what gets sent.
+ */
+function splitReply(reply: string): { text: string; demand?: string; affectionDelta: number } {
+  let affectionDelta = 0;
+  for (const m of reply.matchAll(AFFECTION_TAG)) {
+    affectionDelta = clampDelta(Number(m[1]));
+  }
+  let demand: string | undefined;
+  for (const m of reply.matchAll(DEMAND_TAG)) {
+    demand = m[1]!.toLowerCase();
+  }
+  const text = reply.replace(AFFECTION_TAG_ANY, "").replace(DEMAND_TAG, "").trim();
+  return { text, demand, affectionDelta };
 }
 
 // When the Kinect records a successful gesture, she reacts in the thread on her own.
@@ -103,10 +127,10 @@ db.db.gestureEvent.onInsert(async (_ctx, event) => {
       ...history,
       {
         role: "user",
-        content: `[The camera just saw the player do the "${event.gesture}" you asked for. React in one or two texts. You may end with a new demand tag if you want more.]`,
+        content: `[The camera just saw the player do the "${event.gesture}" you asked for. React in one or two texts. You may end with a new demand tag if you want more. Do not add an affection tag.]`,
       },
     ]);
-    const { text, demand: next } = splitDemand(raw);
+    const { text, demand: next } = splitReply(raw);
     if (!text) return;
     await space.send(text);
     await db.reducers.logMessage({ player: session.player, role: "assistant", text });
@@ -164,11 +188,16 @@ for await (const [space, message] of app.messages) {
         { role: "user", content: text },
       ]),
     );
-    const { text: replyText, demand: newDemand } = splitDemand(reply);
+    const { text: replyText, demand: newDemand, affectionDelta } = splitReply(reply);
     if (!replyText) continue;
     await space.send(replyText);
     if (session) {
       await db.reducers.logMessage({ player: session.player, role: "assistant", text: replyText });
+      if (affectionDelta !== 0) {
+        db.reducers.adjustAffection({ player: session.player, delta: affectionDelta }).catch((err) =>
+          console.warn(`[${space.id}] adjustAffection(${affectionDelta}) rejected:`, String(err)),
+        );
+      }
       if (newDemand && !demand) {
         db.reducers.setDemandFor({ player: session.player, demand: newDemand }).catch((err) =>
           console.warn(`[${space.id}] setDemandFor(${newDemand}) rejected:`, String(err)),
@@ -177,7 +206,7 @@ for await (const [space, message] of app.messages) {
     } else {
       fallbackHistory.get(space.id)?.push({ role: "assistant", content: replyText });
     }
-    console.log(`[${space.id}] ${persona.name}${session ? "" : " (unlinked)"}: ${replyText}${newDemand ? `  [demand:${newDemand}]` : ""}`);
+    console.log(`[${space.id}] ${persona.name}${session ? "" : " (unlinked)"}: ${replyText}${newDemand ? `  [demand:${newDemand}]` : ""}  [affection:${formatDelta(affectionDelta)}]`);
   } catch (err) {
     console.error(`[${space.id}] grok failed:`, err);
     await space.send("ugh my phone is being weird, say that again?");
