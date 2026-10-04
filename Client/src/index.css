@@ -343,31 +343,8 @@ button.ghost:hover { color: var(--text); }
   padding: 14px 26px; font-size: 1.2rem; background: var(--accent); color: #fff; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-/* ---- Heart-grid page transition (components/HeartWipe.tsx) ---- */
-.hw {
-  position: fixed; inset: 0; z-index: 1000; display: grid; overflow: hidden;
-  grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr);
-}
-.hw-cell { display: grid; place-items: center; background: var(--shade); will-change: transform, opacity; }
-.hw-heart { width: 58%; height: 58%; fill: #fff0f7; transform: scale(var(--heart)); filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7)); }
-.hw-in .hw-cell { animation: hw-in 380ms cubic-bezier(0.2, 1.5, 0.4, 1) var(--in) both; }
-.hw-in .hw-heart { animation: hw-heart 460ms cubic-bezier(0.2, 1.8, 0.4, 1) var(--in) both; }
-.hw-out .hw-cell { animation: hw-out 320ms ease-in var(--out) both; }
-@keyframes hw-in {
-  0% { opacity: 0; transform: scale(0.2); filter: brightness(1.5) saturate(1.5); }
-  55% { opacity: 1; transform: scale(1.14); filter: brightness(1.3) saturate(1.4); }
-  100% { opacity: 1; transform: scale(1.02); filter: brightness(1); }
-}
-@keyframes hw-heart {
-  0% { transform: scale(0) rotate(-25deg); }
-  60% { transform: scale(calc(var(--heart) * 1.35)) rotate(6deg); }
-  100% { transform: scale(var(--heart)) rotate(0); }
-}
-@keyframes hw-out {
-  0% { opacity: 1; transform: scale(1.02); }
-  40% { opacity: 1; transform: scale(0.82); filter: brightness(1.6); }
-  100% { opacity: 0; transform: scale(0.1) rotate(12deg); }
-}
+/* ---- Heart-grid page transition (components/HeartWipe.tsx, WebGL) ---- */
+.hw-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1000; display: none; }
 
 /* ---- Title screen start button ---- */
 .title-start {
