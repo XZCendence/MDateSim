@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import AdjustAffectionReducer from "./adjust_affection_reducer";
+import ClaimLatestSessionReducer from "./claim_latest_session_reducer";
 import ClaimSessionReducer from "./claim_session_reducer";
 import ClearDemandReducer from "./clear_demand_reducer";
 import ClearMessagesReducer from "./clear_messages_reducer";
@@ -155,6 +156,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("adjust_affection", AdjustAffectionReducer),
+  __reducerSchema("claim_latest_session", ClaimLatestSessionReducer),
   __reducerSchema("claim_session", ClaimSessionReducer),
   __reducerSchema("clear_demand", ClearDemandReducer),
   __reducerSchema("clear_messages", ClearMessagesReducer),

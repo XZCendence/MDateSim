@@ -47,10 +47,16 @@ async function startFresh(player: Identity, spaceId: string) {
   fallbackHistory.delete(spaceId);
 }
 
+/** Unlinked threads keep whichever persona they started with, so they don't flip per message. */
+const unlinkedPersona = new Map<string, Persona>();
+
 /** Link this thread to the newest unclaimed lobby session for `dateId`, then start fresh. */
 async function claimSession(spaceId: string, dateId: string) {
+  unlinkedPersona.set(spaceId, personaById(dateId));
   try {
-    await db.reducers.claimSession({ dateId, spaceId });
+    // Prefer the newest-wins reducer; fall back to the strict one if the module predates it.
+    const r = db.reducers as unknown as Record<string, ((a: { dateId: string; spaceId: string }) => Promise<void>) | undefined>;
+    await (r.claimLatestSession ?? r.claimSession)!({ dateId, spaceId });
   } catch (err) {
     // No unclaimed lobby session for that date (or several). Still chat, just unlinked.
     console.warn(`[${spaceId}] could not claim a session for ${dateId}:`, String(err));
@@ -80,7 +86,8 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
     const session = sessionForSpace(spaceId);
     if (session) await startFresh(session.player, spaceId);
     fallbackHistory.delete(spaceId);
-    return "(fresh start. pick a date in the lobby and text me her intro line)";
+    unlinkedPersona.delete(spaceId);
+    return "(fresh start. pick a date in the lobby and text me the intro line)";
   }
   const m = /^\/date\s+(\w+)/i.exec(text);
   if (!m) return undefined;
@@ -198,7 +205,10 @@ for await (const [space, message] of app.messages) {
   } else if (!session) {
     session = await claimSession(space.id, DEFAULT_PERSONA.id);
   }
-  const persona = session ? personaById(session.dateId) : (personaFromIntro(text) ?? DEFAULT_PERSONA);
+  const persona = session
+    ? personaById(session.dateId)
+    : (intro ?? unlinkedPersona.get(space.id) ?? DEFAULT_PERSONA);
+  if (!session) unlinkedPersona.set(space.id, persona);
 
   let history: ChatMessage[];
   let affection = 0;
