@@ -23,7 +23,11 @@ function prettyPhone(e164: string): string {
 export default function Start() {
   const { dateId } = useParams();
   const date = findDate(dateId);
-  const mine = useSyncExternalStore(subscribeSpacetime, getMyRows, getMyRows);
+  const mine = useSyncExternalStore(
+    subscribeSpacetime,
+    () => getMyRows(dateId),
+    () => getMyRows(dateId),
+  );
   const [savedPhone, setSavedPhone] = useState(readSavedPhone);
   const [draft, setDraft] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -81,7 +85,7 @@ export default function Start() {
 
   const href = registration ? smsLink(registration.assignedPhoneNumber, date.intro) : null;
   const chatting = chat.length > 0;
-  const step = chatting ? 3 : !savedPhone || error ? 1 : 2;
+  const step = !savedPhone || error ? 1 : chatting ? 3 : 2;
   const first = date.name.split(" ")[0];
   const hearts = Math.max(0, Math.min(100, (mine.affection + 100) / 2));
 

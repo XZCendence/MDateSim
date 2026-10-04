@@ -11,11 +11,9 @@ export default function Lobby() {
   const session = useSession();
 
   function pick(date: DateProfile) {
-    if (session?.dateId !== date.id) {
-      getSpacetime()?.reducers.pickDate({ dateId: date.id }).catch((err: unknown) => {
-        console.error("[spacetime] pickDate failed", err);
-      });
-    }
+    getSpacetime()?.reducers.pickDate({ dateId: date.id }).catch((err: unknown) => {
+      console.error("[spacetime] pickDate failed", err);
+    });
     navigate(`/start/${date.id}`);
   }
 

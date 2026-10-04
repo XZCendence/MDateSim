@@ -151,10 +151,6 @@ function newestUnclaimed(withinMs = 15 * 60_000): { dateId: string; startedAt: b
   return best;
 }
 
-function newestUnclaimedDateId(withinMs = 15 * 60_000): string | undefined {
-  return newestUnclaimed(withinMs)?.dateId;
-}
-
 /** True when the player has no logged messages yet (so an intro is a genuine first text). */
 function history_is_fresh(player: Identity): boolean {
   for (const _ of db.db.message.player.filter(player)) return false;
@@ -236,14 +232,17 @@ for await (const [space, message] of app.messages) {
   // linked, so switching from Bianca to Ling Long (or re-picking) starts clean.
   const intro = personaFromIntro(text);
   let session = sessionForSpace(space.id);
+  const waiting = newestUnclaimed();
   if (intro && (!session || session.dateId !== intro.id || !history_is_fresh(session.player))) {
     session = (await claimSession(space.id, intro.id)) ?? session;
   } else if (!session) {
-    const guess = newestUnclaimedDateId();
-    if (guess) session = await claimSession(space.id, guess);
+    if (waiting) session = await claimSession(space.id, waiting.dateId);
     if (!session) {
       unlinkedPersona.set(space.id, unlinkedPersona.get(space.id) ?? DEFAULT_PERSONA);
     }
+  } else if (waiting && waiting.startedAt > session.startedAt.microsSinceUnixEpoch) {
+    // Lobby just picked on a new identity; keep this phone on the waiting screen, not the old one.
+    session = (await claimSession(space.id, waiting.dateId)) ?? session;
   }
   const persona = session
     ? personaById(session.dateId)

@@ -35,6 +35,12 @@ function hasSpaceId(spaceId: string | undefined): boolean {
   return typeof spaceId === "string" && spaceId.length > 0;
 }
 
+function sameHex(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const norm = (h: string) => h.replace(/^0x/i, "").toLowerCase();
+  return norm(a) === norm(b);
+}
+
 let conn: DbConnection | undefined;
 let identityHex: string | undefined;
 let snapshot: SessionSnapshot = EMPTY;
@@ -74,7 +80,7 @@ function sessionFor(
 ): { dateId: string; startedAt: { microsSinceUnixEpoch: bigint } } | undefined {
   if (!playerHex) return undefined;
   for (const row of db.gameSession.iter()) {
-    if (row.player.toHexString() === playerHex) return row;
+    if (sameHex(row.player.toHexString(), playerHex)) return row;
   }
   return undefined;
 }
@@ -114,11 +120,27 @@ export type MyRows = {
 };
 
 let rowsVersion = 0;
-let rowsCache: { version: number; value: MyRows } | undefined;
+let rowsCache: { version: number; dateId: string | undefined; value: MyRows } | undefined;
 
-function readIrlDates() {
-  if (!conn || !identityHex) return [];
-  return [...conn.db.irlDate.iter()].filter((r) => r.player.toHexString() === identityHex);
+function readIrlDates(playerHex: string | undefined) {
+  if (!conn || !playerHex) return [];
+  return [...conn.db.irlDate.iter()].filter((r) => sameHex(r.player.toHexString(), playerHex));
+}
+
+/** Newest lobby session for this date (or newest overall if no date). A pickDate bumps startedAt
+ * and clears that player's messages, so switching dates starts from an empty thread. */
+function focusPlayerHex(dateId?: string): string | undefined {
+  if (!conn) return identityHex;
+  let newest: { hex: string; startedAt: bigint } | undefined;
+  for (const g of conn.db.gameSession.iter()) {
+    if (dateId && g.dateId !== dateId) continue;
+    const startedAt = g.startedAt.microsSinceUnixEpoch;
+    if (!newest || startedAt > newest.startedAt) {
+      newest = { hex: g.player.toHexString(), startedAt };
+    }
+  }
+  if (dateId && !newest) return undefined;
+  return newest?.hex ?? identityHex;
 }
 
 function bumpRows(): void {
@@ -129,37 +151,39 @@ function bumpRows(): void {
 function messagesFor(playerHex: string): { id: bigint; role: string; text: string }[] {
   if (!conn) return [];
   return [...conn.db.message.iter()]
-    .filter((m) => m.player.toHexString() === playerHex)
+    .filter((m) => sameHex(m.player.toHexString(), playerHex))
     .sort((a, b) => (a.id < b.id ? -1 : 1))
     .slice(-12)
     .map((m) => ({ id: m.id, role: m.role, text: m.text }));
 }
 
-export function getMyRows(): MyRows {
-  if (rowsCache?.version === rowsVersion) return rowsCache.value;
+export function getMyRows(dateId?: string): MyRows {
+  if (rowsCache?.version === rowsVersion && rowsCache.dateId === dateId) return rowsCache.value;
+  const focusHex = focusPlayerHex(dateId);
   let affection = 0;
   let demand: string | undefined;
   let demandMet = false;
   let phase = "texting";
   let linked = false;
-  if (conn && identityHex) {
+  if (conn) {
     for (const g of conn.db.gameSession.iter()) {
-      if (g.player.toHexString() === identityHex) linked = hasSpaceId(g.spaceId);
+      if (sameHex(g.player.toHexString(), focusHex)) linked = hasSpaceId(g.spaceId);
     }
     for (const a of conn.db.affection.iter()) {
-      if (a.player.toHexString() === identityHex) affection = a.value;
+      if (sameHex(a.player.toHexString(), focusHex)) affection = a.value;
     }
+    // Phase stays this browser's so another player's IRL date does not yank this tab off the chat.
     for (const d of conn.db.dateState.iter()) {
-      if (d.player.toHexString() === identityHex) {
+      if (sameHex(d.player.toHexString(), identityHex)) {
         demand = d.demand;
         demandMet = d.demandMet;
         phase = d.phase;
       }
     }
   }
-  const messages = identityHex ? messagesFor(identityHex) : [];
+  const messages = focusHex ? messagesFor(focusHex) : [];
   const value: MyRows = {
-    irlDates: readIrlDates(),
+    irlDates: readIrlDates(identityHex),
     affection,
     demand,
     demandMet,
@@ -167,7 +191,7 @@ export function getMyRows(): MyRows {
     linked,
     messages,
   };
-  rowsCache = { version: rowsVersion, value };
+  rowsCache = { version: rowsVersion, dateId, value };
   return value;
 }
 
