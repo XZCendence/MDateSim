@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useHeartWipe } from "../components/HeartWipe";
 import logoUrl from "../assets/soulmateslogo.png";
 import titleshadowUrl from "../assets/titleshadow.png";
 import dl1 from "../assets/download (1).png";
@@ -23,6 +24,7 @@ const FLOATERS = [
 
 export default function Title() {
   const navigate = useNavigate();
+  const wipe = useHeartWipe();
 
   return (
     <div className="relative overflow-hidden min-h-screen flex flex-col items-center justify-between py-[15vh] bg-gradient-to-b from-sky-300 via-pink-300 to-purple-500">
@@ -53,11 +55,7 @@ export default function Title() {
       <img src={logoUrl} alt="Soulmates" className="relative z-[2] w-[60%] max-w-[480px] mx-auto" />
 
       {/* Start button */}
-      <button
-        onClick={() => navigate("/lobby")}
-        className="relative z-[2] cursor-pointer border-0 rounded-[10px] px-6 py-3 font-semibold text-[#0f0f14] bg-[#f472b6] hover:brightness-110"
-        style={{ fontFamily: "'Pony', system-ui, sans-serif" }}
-      >
+      <button onClick={() => wipe(() => navigate("/lobby"))} className="title-start">
         Start
       </button>
     </div>
