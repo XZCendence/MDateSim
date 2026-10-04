@@ -1,10 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import DateCard from "../components/DateCard";
 import { DATES, type DateProfile } from "../data/dates";
-import { startSession, useSession } from "../lib/session";
+import {useSession } from "../lib/session";
 import bgUrl from "../assets/characterselectbg.png";
 import previewUrl from "../assets/preview.png";
-import { useSession } from "../lib/session";
 import { getSpacetime } from "../lib/spacetime";
 
 export default function Lobby() {
