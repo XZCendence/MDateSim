@@ -53,7 +53,8 @@ export default function Start() {
     return () => controller.abort();
   }, [savedPhone, attempt]);
 
-  const lastId = mine.messages.at(-1)?.id;
+  const chat = mine.liveMessages;
+  const lastId = chat.at(-1)?.id;
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [lastId]);
@@ -78,8 +79,8 @@ export default function Start() {
   }
 
   const href = registration ? smsLink(registration.assignedPhoneNumber, date.intro) : null;
-  const chatting = mine.linked && mine.messages.length > 0;
-  const step = !savedPhone || error ? 1 : chatting ? 3 : 2;
+  const chatting = chat.length > 0;
+  const step = chatting ? 3 : !savedPhone || error ? 1 : 2;
   const first = date.name.split(" ")[0];
 
   return (
@@ -139,7 +140,7 @@ export default function Start() {
         {step === 3 && (
           <>
             <div className="start-chat" aria-live="polite">
-              {mine.messages.map((m) => (
+              {chat.map((m) => (
                 <div key={String(m.id)} className={m.role === "user" ? "bubble me" : "bubble them"}>
                   {m.text}
                 </div>

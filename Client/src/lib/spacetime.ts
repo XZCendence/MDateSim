@@ -12,6 +12,28 @@ export type SessionSnapshot = {
 };
 
 const EMPTY: SessionSnapshot = { ready: false, dateId: null, startedAt: null };
+const TOKEN_KEY = "mdatesim.spacetime.token";
+
+function readToken(): string | undefined {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeToken(token: string | undefined): void {
+  if (!token) return;
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* private mode, quota, etc. */
+  }
+}
+
+function hasSpaceId(spaceId: string | undefined): boolean {
+  return typeof spaceId === "string" && spaceId.length > 0;
+}
 
 let conn: DbConnection | undefined;
 let identityHex: string | undefined;
@@ -76,6 +98,12 @@ export type MyRows = {
   linked: boolean;
   /** This player's conversation, oldest first (texts and spoken IRL lines alike). */
   messages: { id: bigint; role: string; text: string }[];
+  /**
+   * Conversation to mirror on the laptop. Same as `messages` when this browser is the
+   * linked player; otherwise the newest linked thread (a refresh used to mint a new
+   * identity and leave the QR screen staring at an empty session).
+   */
+  liveMessages: { id: bigint; role: string; text: string }[];
 };
 
 let rowsVersion = 0;
@@ -91,6 +119,34 @@ function bumpRows(): void {
   emit();
 }
 
+function messagesFor(playerHex: string): { id: bigint; role: string; text: string }[] {
+  if (!conn) return [];
+  return [...conn.db.message.iter()]
+    .filter((m) => m.player.toHexString() === playerHex)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .slice(-12)
+    .map((m) => ({ id: m.id, role: m.role, text: m.text }));
+}
+
+/** Newest linked iMessage thread's player, if this browser isn't that player. */
+function latestLinkedPlayerHex(except?: string): string | undefined {
+  if (!conn) return undefined;
+  const linked = new Set<string>();
+  for (const g of conn.db.gameSession.iter()) {
+    if (hasSpaceId(g.spaceId)) linked.add(g.player.toHexString());
+  }
+  linked.delete(except ?? "");
+  if (linked.size === 0) return undefined;
+  let best: { player: string; t: bigint } | undefined;
+  for (const m of conn.db.message.iter()) {
+    const player = m.player.toHexString();
+    if (!linked.has(player)) continue;
+    const t = m.sentAt.microsSinceUnixEpoch;
+    if (!best || t > best.t) best = { player, t };
+  }
+  return best?.player;
+}
+
 export function getMyRows(): MyRows {
   if (rowsCache?.version === rowsVersion) return rowsCache.value;
   let affection = 0;
@@ -100,7 +156,7 @@ export function getMyRows(): MyRows {
   let linked = false;
   if (conn && identityHex) {
     for (const g of conn.db.gameSession.iter()) {
-      if (g.player.toHexString() === identityHex) linked = Boolean(g.spaceId);
+      if (g.player.toHexString() === identityHex) linked = hasSpaceId(g.spaceId);
     }
     for (const a of conn.db.affection.iter()) {
       if (a.player.toHexString() === identityHex) affection = a.value;
@@ -113,15 +169,18 @@ export function getMyRows(): MyRows {
       }
     }
   }
-  const messages =
-    conn && identityHex
-      ? [...conn.db.message.iter()]
-          .filter((m) => m.player.toHexString() === identityHex)
-          .sort((a, b) => (a.id < b.id ? -1 : 1))
-          .slice(-12)
-          .map((m) => ({ id: m.id, role: m.role, text: m.text }))
-      : [];
-  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase, linked, messages };
+  const messages = identityHex ? messagesFor(identityHex) : [];
+  const liveMessages = messages.length > 0 ? messages : messagesFor(latestLinkedPlayerHex(identityHex) ?? "");
+  const value: MyRows = {
+    irlDates: readIrlDates(),
+    affection,
+    demand,
+    demandMet,
+    phase,
+    linked,
+    messages,
+    liveMessages,
+  };
   rowsCache = { version: rowsVersion, value };
   return value;
 }
@@ -153,7 +212,9 @@ export function getSpacetime(): DbConnection | undefined {
   conn = DbConnection.builder()
     .withUri(uri)
     .withDatabaseName(databaseName)
-    .onConnect((c, identity) => {
+    .withToken(readToken())
+    .onConnect((c, identity, token) => {
+      writeToken(token);
       identityHex = identity.toHexString();
       console.info("[spacetime] connected as", identityHex.slice(0, 16));
       c.db.gameSession.onInsert((ctx) => (refresh(ctx.db), bumpRows()));
@@ -175,7 +236,7 @@ export function getSpacetime(): DbConnection | undefined {
           tables.irlDate,
           tables.affection,
           tables.dateState,
-          tables.message.where((r) => r.player.eq(identity)),
+          tables.message,
         ]);
     })
     .onConnectError((_c, err) => console.error("[spacetime] connect error", err))

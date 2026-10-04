@@ -137,18 +137,22 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
   return session ? `(now texting with ${p.name})` : `(no lobby session waiting for ${p.name}, chatting unlinked)`;
 }
 
-/** The date of the most recent unclaimed lobby pick (within `withinMs`), if any. With no name
+/** The most recent unclaimed lobby pick (within `withinMs`), if any. With no name
  * in the first text, the person who just clicked in the lobby is almost always the texter. */
-function newestUnclaimedDateId(withinMs = 15 * 60_000): string | undefined {
-  let best: { dateId: string; t: bigint } | undefined;
+function newestUnclaimed(withinMs = 15 * 60_000): { dateId: string; startedAt: bigint } | undefined {
+  let best: { dateId: string; startedAt: bigint } | undefined;
   const cutoff = BigInt(Date.now() - withinMs) * 1000n;
   for (const s of db.db.gameSession.iter()) {
     if (s.spaceId) continue;
-    const t = s.startedAt.microsSinceUnixEpoch;
-    if (t < cutoff) continue;
-    if (!best || t > best.t) best = { dateId: s.dateId, t };
+    const startedAt = s.startedAt.microsSinceUnixEpoch;
+    if (startedAt < cutoff) continue;
+    if (!best || startedAt > best.startedAt) best = { dateId: s.dateId, startedAt };
   }
-  return best?.dateId;
+  return best;
+}
+
+function newestUnclaimedDateId(withinMs = 15 * 60_000): string | undefined {
+  return newestUnclaimed(withinMs)?.dateId;
 }
 
 /** True when the player has no logged messages yet (so an intro is a genuine first text). */
@@ -239,6 +243,14 @@ for await (const [space, message] of app.messages) {
     if (guess) session = await claimSession(space.id, guess);
     if (!session) {
       unlinkedPersona.set(space.id, unlinkedPersona.get(space.id) ?? DEFAULT_PERSONA);
+    }
+  } else {
+    // Laptop refresh mints a new identity and a new unclaimed lobby pick. The phone is
+    // still talking to the old session, so the QR screen never sees the chat. Steal the
+    // thread for that newer pick.
+    const newer = newestUnclaimed();
+    if (newer && newer.startedAt > session.startedAt.microsSinceUnixEpoch) {
+      session = (await claimSession(space.id, newer.dateId)) ?? session;
     }
   }
   const persona = session
