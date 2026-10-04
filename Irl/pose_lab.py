@@ -154,13 +154,13 @@ def main():
 
             fps = 0.9 * fps + 0.1 / max(now - last, 1e-6)
             last = now
-            head = f"{fps:4.1f} fps"
+            hud = f"{fps:4.1f} fps"
             if pose is None:
-                head += "   no player in view"
+                hud += "   no player in view"
             else:
                 d = distance_m(pose)
-                head += f"   {d:.2f} m" if d is not None else "   ? m"
-            text(image, head, (20, 36), 0.7)
+                hud += f"   {d:.2f} m" if d is not None else "   ? m"
+            text(image, hud, (20, 36), 0.7)
             if result.winner != IDLE:
                 text(image, LABELS.get(result.winner, result.winner).upper(), (20, 90), 1.4, (80, 230, 110), 3)
 
