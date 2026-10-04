@@ -54,6 +54,8 @@ interface DateRun {
   demand?: string;
   demandSince: number;
   nags: number;
+  chatBeats: number; // lines of plain conversation since the last demand was resolved
+  needBeats: number; // how many of those she wants before asking for the next thing (1 or 2)
   heard: string[];
   did: string[];
 }
@@ -94,7 +96,14 @@ export function startDirector(db: DbConnection): void {
     return { known: true, inView: p.inView, facing: p.facing };
   }
 
-  function system(persona: Persona, player: Identity, run: DateRun): string {
+  /** Has there been enough plain conversation since the last demand to ask for another? */
+  const readyToAsk = (run: DateRun) => !run.demand && run.chatBeats >= run.needBeats;
+  const newRound = (run: DateRun) => {
+    run.chatBeats = 0;
+    run.needBeats = Math.random() < 0.5 ? 1 : 2;
+  };
+
+  function system(persona: Persona, player: Identity, run: DateRun, allowDemand: boolean): string {
     const affection = db.db.affection.player.find(player)?.value ?? 0;
     const pres = presenceOf(player);
     const sees = !pres.known
@@ -108,11 +117,14 @@ export function startDirector(db: DbConnection): void {
 
 ## RIGHT NOW: you are on the IRL date
 Ignore the texting rules above. You are in the room, speaking OUT LOUD to the player, who is standing
-in front of you. Your words are voiced and shown as subtitles, so: natural spoken sentences, one to
-three short ones, no emoji, no asterisks or stage directions, proper capitalization.
+in front of you. Your words are voiced and shown as subtitles, so: natural spoken sentences, ONE or TWO
+short ones (under 25 words total), no emoji, no asterisks or stage directions, proper capitalization.
+Short lines keep the date moving; long speeches kill it.
 You can SEE them through the camera. ${sees}
-You lead this date. You do not wait to be spoken to. Make them do things, at good moments and at
-bad ones: mid-conversation, right after they just did something, the moment they relax.
+You lead this date and you do not wait to be spoken to, but it is a date, not a drill. The rhythm:
+one or two normal or funny exchanges (banter, a question about them, a story, a complaint, a roast),
+THEN you ask them to do one thing for you, you react to it, and you go back to talking.
+${allowDemand ? "RIGHT NOW you may ask them to do something if this line calls for it." : "RIGHT NOW: just talk. Do NOT ask them to do anything physical in this line, and do NOT use a demand tag."}
 To make them do something, say it in your own words AND end with one tag, written EXACTLY like
 [demand:kneel] (the word demand, a colon, the name). Without the tag the camera does not check. Allowed tags:
 ${IRL_DEMANDS.map((d) => `[demand:${d}] (${DEMAND_HINTS[d]})`).join(", ")}.
@@ -125,6 +137,7 @@ read them aloud or mention the camera system. End every line with an affection t
 
   /** Generate, log, and apply one spoken line. */
   async function say(player: Identity, run: DateRun, direction: string, heard?: string, mayDemand = true): Promise<void> {
+    const allowDemand = mayDemand && !run.demand;
     const session = db.db.gameSession.player.find(player);
     if (!session) return;
     const persona = personaById(session.dateId);
@@ -135,7 +148,7 @@ read them aloud or mention the camera system. End every line with an affection t
       if (heard) await db.reducers.logMessage({ player, role: "user", text: heard });
       const raw = await chat(
         [
-          { role: "system", content: system(persona, player, run) },
+          { role: "system", content: system(persona, player, run, allowDemand) },
           ...past,
           ...(heard ? [{ role: "user" as const, content: heard }] : []),
           { role: "user", content: `[${direction}]` },
@@ -144,7 +157,7 @@ read them aloud or mention the camera system. End every line with an affection t
       );
       const { text: rawText, demand: tagged, affectionDelta } = splitReply(raw);
       // If they clearly ordered something but forgot the tag, still arm the camera for it.
-      const demand = tagged ?? (mayDemand && !run.demand ? inferDemand(rawText) : undefined);
+      const demand = allowDemand ? (tagged ?? inferDemand(rawText)) : undefined;
       const text = rawText.replace(/\s*\n+\s*/g, " ").trim(); // one subtitle, one utterance
       if (!text) return;
       // The date may have ended while Grok was thinking (tab closed); don't speak into the void.
@@ -155,12 +168,14 @@ read them aloud or mention the camera system. End every line with an affection t
       }
       const now = Date.now();
       run.quietUntil = now + 1200 + text.length * 65; // rough speaking time
-      run.nextBeatAt = run.quietUntil + rand(5000, 9000);
+      run.nextBeatAt = run.quietUntil + rand(4000, 7000);
       if (demand && !run.demand && (IRL_DEMANDS as readonly string[]).includes(demand)) {
         await db.reducers.setDemandFor({ player, demand });
         run.demand = demand;
         run.demandSince = run.quietUntil; // the clock starts when she finishes asking
         run.nags = 0;
+      } else if (!run.demand) {
+        run.chatBeats += 1; // a line of plain conversation
       }
       console.log(`[date ${player.toHexString().slice(0, 10)}] ${persona.name}: ${text}${demand ? `  [demand:${demand}]` : ""}  [affection:${formatDelta(affectionDelta)}]`);
     } catch (err) {
@@ -182,14 +197,15 @@ read them aloud or mention the camera system. End every line with an affection t
     // What the player says cuts in immediately; everything else waits for her to finish speaking.
     const heard = run.heard.shift();
     if (heard) {
-      return say(player, run, "They said that to you out loud, in person. Answer them.", heard);
+      const ask = readyToAsk(run);
+      return say(player, run, `They said that to you out loud, in person. Answer like a person would: react, tease, ask something back.${ask ? " If it fits, you can then ask them to do something for you (with its tag)." : ""}`, heard, ask);
     }
     if (now < run.quietUntil) return;
 
     const did = run.did.shift();
     if (did) {
       // A reaction names the gesture they just did ("good jumping jacks"), so only a real tag counts here.
-      return say(player, run, `You just watched them do it: ${did} (${DEMAND_HINTS[did] ?? did}). React. You may want more; if so, end with a [demand:...] tag.`, undefined, false);
+      return say(player, run, `You just watched them do it: ${did} (${DEMAND_HINTS[did] ?? did}). React to it in character, then keep the conversation going. Do not ask for anything else yet.`, undefined, false);
     }
 
     if (!run.greeted) {
@@ -229,6 +245,7 @@ read them aloud or mention the camera system. End every line with an affection t
       if (waited > GIVE_UP_MS) {
         const gaveUpOn = run.demand;
         run.demand = undefined;
+        newRound(run);
         await db.reducers.setDemandFor({ player, demand: "" }).catch(() => {});
         return say(player, run, `They never did what you asked (${gaveUpOn}). You have given up on it. You are hurt or disgusted; show it. Use a clearly negative affection tag. No demand tag.`, undefined, false);
       }
@@ -240,10 +257,11 @@ read them aloud or mention the camera system. End every line with an affection t
     }
 
     if (now >= run.nextBeatAt) {
-      const wrongMoment = Math.random() < 0.4;
-      return say(player, run, wrongMoment
-        ? "Nothing is happening. Out of nowhere, at a bad moment, make them do something. End with a demand tag."
-        : `Keep the date going: say something to them in character${pres.known && !pres.facing ? " (they are looking away from you, which you notice)" : ""}. Add a demand tag if the moment calls for it.`);
+      const looking = pres.known && !pres.facing ? " They are looking away from you, which you notice." : "";
+      if (readyToAsk(run)) {
+        return say(player, run, `You have chatted enough. Now ask them to do one thing for you, in your own words and for your own reasons, and end with its demand tag.${Math.random() < 0.35 ? " Spring it on them out of nowhere." : ""}${looking}`);
+      }
+      return say(player, run, `Keep the date going with ONE normal or funny thing: a question about them, an observation, a short story from your day, a complaint, a roast. No demand.${looking}`, undefined, false);
     }
   }
 
@@ -256,7 +274,7 @@ read them aloud or mention the camera system. End every line with an affection t
       let run = runs.get(hex);
       if (!run) {
         const now = Date.now();
-        run = { enteredAt: now, greeted: false, saidWaiting: false, saidLeft: false, busy: false, quietUntil: 0, nextBeatAt: now, demandSince: 0, nags: 0, heard: [], did: [] };
+        run = { enteredAt: now, greeted: false, saidWaiting: false, saidLeft: false, busy: false, quietUntil: 0, nextBeatAt: now, demandSince: 0, nags: 0, chatBeats: 0, needBeats: 1, heard: [], did: [] };
         runs.set(hex, run);
         console.log(`[date ${hex.slice(0, 10)}] IRL date started`);
       }
@@ -276,6 +294,7 @@ read them aloud or mention the camera system. End every line with an affection t
     const run = runs.get(event.player.toHexString());
     if (!run) return;
     run.demand = undefined;
+    newRound(run);
     run.did.push(event.gesture);
   });
 
