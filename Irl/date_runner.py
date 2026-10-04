@@ -32,6 +32,7 @@ import cv2
 from gestures import DETECTORS, Gesture, distance_m, make
 from kinect import Kinect
 from pose import PoseTracker, draw_pose
+from pose_stream import PoseStream
 
 HOST = os.environ.get("SPACETIMEDB_HOST", "https://maincloud.spacetimedb.com").rstrip("/")
 DB = os.environ.get("SPACETIMEDB_DB_NAME", "m-date-sim-wl608")
@@ -147,6 +148,7 @@ def main() -> None:
     args = ap.parse_args()
 
     print(f"[runner] {HOST} / {DB}")
+    stream = PoseStream()  # live armature for the website (ws://127.0.0.1:8765)
     tracker = PoseTracker()
     detector: Gesture | None = None
     active: tuple[str, str] | None = None  # (player, demand) we're currently detecting
@@ -178,6 +180,8 @@ def main() -> None:
             if frame is None:
                 continue
             pose = tracker.process(frame, kinect)
+            stream.publish(pose, demand=active[1] if active else None,
+                           status=detector.status if detector else "", progress=detector.progress if detector else 0.0)
 
             if detector is not None and active is not None and detector.update(pose):
                 player, demand = active
