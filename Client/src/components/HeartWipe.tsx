@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, type ReactNo
 
 /**
  * Full-screen page transition, drawn by one WebGL fragment shader: a grid of pink heart tiles
- * closes in from the edges of the screen to the centre (with a dithered front), the page
+ * (a pink and black checkerboard) closes in from the edges of the screen to the centre (with a dithered front), the page
  * changes underneath, then the grid opens back up from the centre outward.
  *
  *   const wipe = useHeartWipe();
@@ -66,10 +66,13 @@ void main() {
   float box = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
   float tile = smoothstep(px, -px, box) * step(0.001, tIn);
 
-  vec3 shade = mix(vec3(1.0, 0.31, 0.60), vec3(1.0, 0.42, 0.67), checker);
-  if (n > 0.8) shade = vec3(1.0, 0.53, 0.74);
-  shade *= 1.0 + 0.28 * sin(tIn * 3.14159);         // lights up as it lands, settles back
-  shade *= 1.0 + 0.5 * gone;
+  // Checkerboard: pink tiles with white hearts, black tiles with pink hearts.
+  vec3 pink = mix(vec3(1.0, 0.31, 0.60), vec3(1.0, 0.45, 0.69), step(0.75, n));
+  vec3 black = vec3(0.07, 0.03, 0.06);
+  vec3 shade = mix(pink, black, checker);
+  float flash = 0.28 * sin(tIn * 3.14159) + 0.5 * gone;   // lights up as it lands, settles back
+  shade = shade * (1.0 + flash) + checker * pink * flash * 0.45;
+  vec3 heartCol = mix(vec3(1.0, 0.94, 0.97), pink, checker);
 
   // Heart: pops in a beat after its tile, with overshoot and a little spin.
   float hs = (0.85 + 0.3 * n) * backOut(tHeart) * step(0.001, tHeart) * (1.0 - gone);
@@ -80,7 +83,7 @@ void main() {
   float heart = smoothstep(px, -px, hd) * step(0.001, hs);
   float glow = exp(-max(hd, 0.0) * 22.0) * 0.30 * step(0.001, hs);
 
-  vec3 col = mix(shade + glow, vec3(1.0, 0.94, 0.97), heart);
+  vec3 col = mix(shade + glow * mix(vec3(1.0), pink, checker), heartCol, heart);
   gl_FragColor = vec4(col * tile, tile);            // premultiplied alpha
 }`;
 
