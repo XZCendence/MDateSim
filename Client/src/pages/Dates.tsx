@@ -34,6 +34,12 @@ export default function Dates() {
     setWhen("");
   }
 
+  function setPhase(phase: "texting" | "irl") {
+    getSpacetime()?.reducers.setPhase({ phase }).catch((err: unknown) => {
+      console.error("[spacetime] setPhase failed", err);
+    });
+  }
+
   function cancel(id: bigint) {
     getSpacetime()?.reducers.setIrlDateStatus({ id, status: "cancelled" }).catch((err: unknown) => {
       console.error("[spacetime] setIrlDateStatus failed", err);
@@ -49,6 +55,13 @@ export default function Dates() {
       <h1>IRL dates with {date.name}</h1>
       <p className="muted">
         When the date starts, she takes over. Stand in front of the Kinect and do what she says.
+      </p>
+      <p className="row">
+        {mine.phase === "irl" ? (
+          <button className="ghost" onClick={() => setPhase("texting")}>End the IRL date</button>
+        ) : (
+          <button onClick={() => setPhase("irl")}>Start the IRL date now</button>
+        )}
       </p>
       <p className="small">
         Affection: <strong>{mine.affection}</strong>

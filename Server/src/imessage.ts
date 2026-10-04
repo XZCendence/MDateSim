@@ -64,8 +64,13 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
   return session ? `(now texting with ${p.name})` : `(no lobby session waiting for ${p.name}, chatting unlinked)`;
 }
 
-function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean): string {
+function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean, phase = "texting"): string {
   let s = `${persona.system}\n\nYour current affection for the player is ${affection} on a scale of -100 to 100. Let it color your tone.`;
+  if (phase === "irl") {
+    s += `\nYou are on an IRL date right now: the player is standing in front of the camera. Be bold and physical; ask them to do things with a demand tag early and often (every message or two), and escalate.`;
+  } else {
+    s += `\nYou are only texting right now; the camera is off. Demands are rare teases, mostly save them for the IRL date.`;
+  }
   if (demand) {
     s += demandMet
       ? `\nYou asked them to "${demand}" in front of the camera and they did it. Acknowledge it in your own way.`
@@ -94,17 +99,22 @@ db.db.gestureEvent.onInsert(async (_ctx, event) => {
   try {
     const space = await imessage(app).space.get(session.spaceId);
     const raw = await chat([
-      { role: "system", content: buildSystem(persona, affection, undefined, false) },
+      { role: "system", content: buildSystem(persona, affection, undefined, false, "irl") },
       ...history,
       {
         role: "user",
-        content: `[The camera just saw the player do the "${event.gesture}" you asked for. React to it in one or two texts. Do not add a demand tag.]`,
+        content: `[The camera just saw the player do the "${event.gesture}" you asked for. React in one or two texts. You may end with a new demand tag if you want more.]`,
       },
     ]);
-    const { text } = splitDemand(raw);
+    const { text, demand: next } = splitDemand(raw);
     if (!text) return;
     await space.send(text);
     await db.reducers.logMessage({ player: session.player, role: "assistant", text });
+    if (next) {
+      db.reducers.setDemandFor({ player: session.player, demand: next }).catch((err) =>
+        console.warn(`[${session.spaceId}] setDemandFor(${next}) rejected:`, String(err)),
+      );
+    }
     console.log(`[${session.spaceId}] ${persona.name} (reacting to ${event.gesture}): ${text}`);
   } catch (err) {
     console.error(`[${session.spaceId}] gesture reaction failed:`, err);
@@ -130,12 +140,14 @@ for await (const [space, message] of app.messages) {
   let affection = 0;
   let demand: string | undefined;
   let demandMet = false;
+  let phase = "texting";
   if (session) {
     history = historyFor(session.player);
     affection = db.db.affection.player.find(session.player)?.value ?? 0;
     const state = db.db.dateState.player.find(session.player);
     demand = state?.demand;
     demandMet = state?.demandMet ?? false;
+    phase = state?.phase ?? "texting";
     await db.reducers.logMessage({ player: session.player, role: "user", text });
   } else {
     history = fallbackHistory.get(space.id) ?? [];
@@ -147,7 +159,7 @@ for await (const [space, message] of app.messages) {
   try {
     const reply = await app.responding(space, () =>
       chat([
-        { role: "system", content: buildSystem(persona, affection, demand, demandMet) },
+        { role: "system", content: buildSystem(persona, affection, demand, demandMet, phase) },
         ...history,
         { role: "user", content: text },
       ]),

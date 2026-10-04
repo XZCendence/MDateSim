@@ -11,7 +11,7 @@ Talks to SpacetimeDB over its HTTP API (no Python SDK needed):
   POST /v1/database/<db>/call/<reducer>  JSON array of args
 
 Usage
-  python date_runner.py                 # follow whichever player is in phase "irl"
+  python date_runner.py                 # follow whoever has an open demand (phase "irl" first)
   python date_runner.py --player 0xc2…  # follow one player identity
   python date_runner.py --headless      # no window (just logs)
 
@@ -118,13 +118,23 @@ def record_gesture(player: str, gesture: str, success: bool) -> None:
 
 
 def current_demand(player: str | None) -> tuple[str | None, str | None, bool]:
-    """(player, demand, demand_met) for the player we're following, or (None, None, False)."""
-    where = f"WHERE player = {player}" if player else "WHERE phase = 'irl'"
-    rows = sql(f"SELECT player, demand, demand_met FROM date_state {where}")
-    if not rows:
-        return None, None, False
-    row = rows[0]
-    return row["player"], row["demand"] or None, bool(row["demand_met"])
+    """(player, demand, demand_met) for the player we're following, or (None, None, False).
+
+    With no --player we follow whoever has an open (unmet) demand, preferring anyone in
+    phase "irl". The texting loop sets demands whenever she asks, in either phase.
+    """
+    rows = sql("SELECT player, phase, demand, demand_met FROM date_state")
+    if player:
+        rows = [r for r in rows if r["player"] == player]
+    open_rows = [r for r in rows if r["demand"] and not r["demand_met"]]
+    open_rows.sort(key=lambda r: 0 if r["phase"] == "irl" else 1)
+    if open_rows:
+        r = open_rows[0]
+        return r["player"], r["demand"], False
+    if rows and player:
+        r = rows[0]
+        return r["player"], r["demand"] or None, bool(r["demand_met"])
+    return None, None, False
 
 
 # ---------------------------------------------------------------- the loop ---

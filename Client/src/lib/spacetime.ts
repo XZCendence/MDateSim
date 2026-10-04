@@ -71,6 +71,7 @@ export type MyRows = {
   affection: number;
   demand: string | undefined;
   demandMet: boolean;
+  phase: string;
 };
 
 let rowsVersion = 0;
@@ -91,6 +92,7 @@ export function getMyRows(): MyRows {
   let affection = 0;
   let demand: string | undefined;
   let demandMet = false;
+  let phase = "texting";
   if (conn && identityHex) {
     for (const a of conn.db.affection.iter()) {
       if (a.player.toHexString() === identityHex) affection = a.value;
@@ -99,10 +101,11 @@ export function getMyRows(): MyRows {
       if (d.player.toHexString() === identityHex) {
         demand = d.demand;
         demandMet = d.demandMet;
+        phase = d.phase;
       }
     }
   }
-  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet };
+  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase };
   rowsCache = { version: rowsVersion, value };
   return value;
 }
