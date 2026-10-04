@@ -5,11 +5,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
-    "paths": {
-      "@bindings/*": ["./../Server/src/module_bindings/*"],
-      "spacetimedb": ["./node_modules/spacetimedb"],
-      "spacetimedb/*": ["./node_modules/spacetimedb/*"]
-    },
+    "paths": { "@bindings/*": ["./../Server/src/module_bindings/*"] },
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

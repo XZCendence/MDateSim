@@ -6,31 +6,19 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import AdjustAffectionReducer from "../adjust_affection_reducer";
 import ClaimSessionReducer from "../claim_session_reducer";
 import ClearDemandReducer from "../clear_demand_reducer";
-import ClearMessagesReducer from "../clear_messages_reducer";
 import ClearSessionReducer from "../clear_session_reducer";
-import LogMessageReducer from "../log_message_reducer";
 import MarkDemandMetReducer from "../mark_demand_met_reducer";
 import PickDateReducer from "../pick_date_reducer";
-import RecordGestureReducer from "../record_gesture_reducer";
-import ScheduleIrlDateReducer from "../schedule_irl_date_reducer";
 import SetDemandReducer from "../set_demand_reducer";
-import SetIrlDateStatusReducer from "../set_irl_date_status_reducer";
 import SetPhaseReducer from "../set_phase_reducer";
 
-export type AdjustAffectionParams = __Infer<typeof AdjustAffectionReducer>;
 export type ClaimSessionParams = __Infer<typeof ClaimSessionReducer>;
 export type ClearDemandParams = __Infer<typeof ClearDemandReducer>;
-export type ClearMessagesParams = __Infer<typeof ClearMessagesReducer>;
 export type ClearSessionParams = __Infer<typeof ClearSessionReducer>;
-export type LogMessageParams = __Infer<typeof LogMessageReducer>;
 export type MarkDemandMetParams = __Infer<typeof MarkDemandMetReducer>;
 export type PickDateParams = __Infer<typeof PickDateReducer>;
-export type RecordGestureParams = __Infer<typeof RecordGestureReducer>;
-export type ScheduleIrlDateParams = __Infer<typeof ScheduleIrlDateReducer>;
 export type SetDemandParams = __Infer<typeof SetDemandReducer>;
-export type SetIrlDateStatusParams = __Infer<typeof SetIrlDateStatusReducer>;
 export type SetPhaseParams = __Infer<typeof SetPhaseReducer>;
 

@@ -13,8 +13,6 @@ export default defineConfig({
   resolve: {
     // Single source of truth: the generated SpacetimeDB bindings live in Server/.
     alias: { "@bindings": bindings },
-    // The bindings import `spacetimedb` from Server/node_modules; force one copy.
-    dedupe: ["spacetimedb"],
   },
   server: {
     fs: { allow: [".", bindings] },

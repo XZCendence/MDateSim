@@ -10,12 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export const Affection = __t.object("Affection", {
-  player: __t.identity(),
-  value: __t.i32(),
-});
-export type Affection = __Infer<typeof Affection>;
-
 export const DateState = __t.object("DateState", {
   player: __t.identity(),
   phase: __t.string(),
@@ -31,34 +25,6 @@ export const GameSession = __t.object("GameSession", {
   spaceId: __t.option(__t.string()),
 });
 export type GameSession = __Infer<typeof GameSession>;
-
-export const GestureEvent = __t.object("GestureEvent", {
-  id: __t.u64(),
-  player: __t.identity(),
-  gesture: __t.string(),
-  success: __t.bool(),
-  at: __t.timestamp(),
-});
-export type GestureEvent = __Infer<typeof GestureEvent>;
-
-export const IrlDate = __t.object("IrlDate", {
-  id: __t.u64(),
-  player: __t.identity(),
-  scheduledFor: __t.timestamp(),
-  activity: __t.string(),
-  status: __t.string(),
-  createdAt: __t.timestamp(),
-});
-export type IrlDate = __Infer<typeof IrlDate>;
-
-export const Message = __t.object("Message", {
-  id: __t.u64(),
-  player: __t.identity(),
-  role: __t.string(),
-  text: __t.string(),
-  sentAt: __t.timestamp(),
-});
-export type Message = __Infer<typeof Message>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),

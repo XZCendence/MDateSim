@@ -34,46 +34,25 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import AdjustAffectionReducer from "./adjust_affection_reducer";
 import ClaimSessionReducer from "./claim_session_reducer";
 import ClearDemandReducer from "./clear_demand_reducer";
-import ClearMessagesReducer from "./clear_messages_reducer";
 import ClearSessionReducer from "./clear_session_reducer";
-import LogMessageReducer from "./log_message_reducer";
 import MarkDemandMetReducer from "./mark_demand_met_reducer";
 import PickDateReducer from "./pick_date_reducer";
-import RecordGestureReducer from "./record_gesture_reducer";
-import ScheduleIrlDateReducer from "./schedule_irl_date_reducer";
 import SetDemandReducer from "./set_demand_reducer";
-import SetIrlDateStatusReducer from "./set_irl_date_status_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import AffectionRow from "./affection_table";
 import DateStateRow from "./date_state_table";
 import GameSessionRow from "./game_session_table";
-import GestureEventRow from "./gesture_event_table";
-import IrlDateRow from "./irl_date_table";
-import MessageRow from "./message_table";
 import PlayerRow from "./player_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  affection: __table({
-    name: 'affection',
-    indexes: [
-      { accessor: 'player', name: 'affection_player_idx_btree', algorithm: 'btree', columns: [
-        'player',
-      ] },
-    ],
-    constraints: [
-      { name: 'affection_player_key', constraint: 'unique', columns: ['player'] },
-    ],
-  }, AffectionRow),
   dateState: __table({
     name: 'date_state',
     indexes: [
@@ -96,48 +75,6 @@ const tablesSchema = __schema({
       { name: 'game_session_player_key', constraint: 'unique', columns: ['player'] },
     ],
   }, GameSessionRow),
-  gestureEvent: __table({
-    name: 'gesture_event',
-    indexes: [
-      { accessor: 'id', name: 'gesture_event_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-      { accessor: 'player', name: 'gesture_event_player_idx_btree', algorithm: 'btree', columns: [
-        'player',
-      ] },
-    ],
-    constraints: [
-      { name: 'gesture_event_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, GestureEventRow),
-  irlDate: __table({
-    name: 'irl_date',
-    indexes: [
-      { accessor: 'id', name: 'irl_date_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-      { accessor: 'player', name: 'irl_date_player_idx_btree', algorithm: 'btree', columns: [
-        'player',
-      ] },
-    ],
-    constraints: [
-      { name: 'irl_date_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, IrlDateRow),
-  message: __table({
-    name: 'message',
-    indexes: [
-      { accessor: 'id', name: 'message_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
-      { accessor: 'player', name: 'message_player_idx_btree', algorithm: 'btree', columns: [
-        'player',
-      ] },
-    ],
-    constraints: [
-      { name: 'message_id_key', constraint: 'unique', columns: ['id'] },
-    ],
-  }, MessageRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -153,18 +90,12 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("adjust_affection", AdjustAffectionReducer),
   __reducerSchema("claim_session", ClaimSessionReducer),
   __reducerSchema("clear_demand", ClearDemandReducer),
-  __reducerSchema("clear_messages", ClearMessagesReducer),
   __reducerSchema("clear_session", ClearSessionReducer),
-  __reducerSchema("log_message", LogMessageReducer),
   __reducerSchema("mark_demand_met", MarkDemandMetReducer),
   __reducerSchema("pick_date", PickDateReducer),
-  __reducerSchema("record_gesture", RecordGestureReducer),
-  __reducerSchema("schedule_irl_date", ScheduleIrlDateReducer),
   __reducerSchema("set_demand", SetDemandReducer),
-  __reducerSchema("set_irl_date_status", SetIrlDateStatusReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
 );
 
