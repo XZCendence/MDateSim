@@ -25,22 +25,43 @@ const app = await Spectrum({
 const db = await connectSpacetime();
 const HISTORY_LIMIT = 30;
 
+/** The session this iMessage thread is linked to. Several may carry the same spaceId after
+ * re-picks from the lobby; the newest one is the live one. */
 function sessionForSpace(spaceId: string) {
+  let best: ReturnType<typeof db.db.gameSession.iter> extends Iterable<infer R> ? R | undefined : never;
   for (const s of db.db.gameSession.iter()) {
-    if (s.spaceId === spaceId) return s;
+    if (s.spaceId !== spaceId) continue;
+    if (!best || s.startedAt.microsSinceUnixEpoch > best.startedAt.microsSinceUnixEpoch) best = s;
   }
-  return undefined;
+  return best;
 }
 
-async function claimSession(spaceId: string, firstText: string) {
-  const persona = personaFromIntro(firstText) ?? DEFAULT_PERSONA;
+/** Wipe the relationship state so a (re)claimed session starts as a brand new date. */
+async function startFresh(player: Identity, spaceId: string) {
+  const affection = db.db.affection.player.find(player)?.value ?? 0;
+  await Promise.allSettled([
+    db.reducers.clearMessages({ player }),
+    affection !== 0 ? db.reducers.adjustAffection({ player, delta: -affection }) : Promise.resolve(),
+    db.reducers.setDemandFor({ player, demand: "" }),
+  ]);
+  fallbackHistory.delete(spaceId);
+}
+
+/** Link this thread to the newest unclaimed lobby session for `dateId`, then start fresh. */
+async function claimSession(spaceId: string, dateId: string) {
   try {
-    await db.reducers.claimSession({ dateId: persona.id, spaceId });
+    await db.reducers.claimSession({ dateId, spaceId });
   } catch (err) {
     // No unclaimed lobby session for that date (or several). Still chat, just unlinked.
-    console.warn(`[${spaceId}] could not claim a session for ${persona.id}:`, String(err));
+    console.warn(`[${spaceId}] could not claim a session for ${dateId}:`, String(err));
+    return undefined;
   }
-  return sessionForSpace(spaceId);
+  const session = sessionForSpace(spaceId);
+  if (session) {
+    await startFresh(session.player, spaceId);
+    console.log(`[${spaceId}] claimed ${dateId} session for ${session.player.toHexString().slice(0, 10)}…`);
+  }
+  return session;
 }
 
 function historyFor(player: Identity): ChatMessage[] {
@@ -53,15 +74,26 @@ function historyFor(player: Identity): ChatMessage[] {
 /** Unlinked threads (no lobby session) keep history in memory so the demo still works. */
 const fallbackHistory = new Map<string, ChatMessage[]>();
 
-/** `/date rin` re-targets this thread at a different date's unclaimed session (demo helper). */
+/** Text commands: `/reset` wipes this thread's date; `/date rin` re-targets it (demo helper). */
 async function handleCommand(spaceId: string, text: string): Promise<string | undefined> {
+  if (/^\/reset\b/i.test(text)) {
+    const session = sessionForSpace(spaceId);
+    if (session) await startFresh(session.player, spaceId);
+    fallbackHistory.delete(spaceId);
+    return "(fresh start. pick a date in the lobby and text me her intro line)";
+  }
   const m = /^\/date\s+(\w+)/i.exec(text);
   if (!m) return undefined;
   const p = (PERSONAS as Record<string, Persona | undefined>)[m[1]!.toLowerCase()];
   if (!p) return `no date named ${m[1]}. options: ${Object.keys(PERSONAS).join(", ")}`;
-  fallbackHistory.delete(spaceId);
-  const session = await claimSession(spaceId, p.intro);
+  const session = await claimSession(spaceId, p.id);
   return session ? `(now texting with ${p.name})` : `(no lobby session waiting for ${p.name}, chatting unlinked)`;
+}
+
+/** True when the player has no logged messages yet (so an intro is a genuine first text). */
+function history_is_fresh(player: Identity): boolean {
+  for (const _ of db.db.message.player.filter(player)) return false;
+  return true;
 }
 
 function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean, phase = "texting"): string {
@@ -157,7 +189,15 @@ for await (const [space, message] of app.messages) {
     continue;
   }
 
-  const session = sessionForSpace(space.id) ?? (await claimSession(space.id, text));
+  // An intro line from the lobby QR means "new date": re-claim even if this thread is already
+  // linked, so switching from Bianca to Ling Long (or re-picking) starts clean.
+  const intro = personaFromIntro(text);
+  let session = sessionForSpace(space.id);
+  if (intro && (!session || session.dateId !== intro.id || !history_is_fresh(session.player))) {
+    session = (await claimSession(space.id, intro.id)) ?? session;
+  } else if (!session) {
+    session = await claimSession(space.id, DEFAULT_PERSONA.id);
+  }
   const persona = session ? personaById(session.dateId) : (personaFromIntro(text) ?? DEFAULT_PERSONA);
 
   let history: ChatMessage[];
