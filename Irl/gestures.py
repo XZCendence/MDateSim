@@ -63,6 +63,13 @@ def _torso_length(pose: Pose) -> float:
     return float(np.linalg.norm(_mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER) - _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)))
 
 
+def _ramp(x: float, lo: float, hi: float) -> float:
+    """Linear 0..1 as x goes lo -> hi (works with hi < lo for a falling ramp)."""
+    if hi == lo:
+        return 1.0 if x >= hi else 0.0
+    return float(min(1.0, max(0.0, (x - lo) / (hi - lo))))
+
+
 def _depth(pose: Pose, *joints: Joint) -> float | None:
     """Median valid depth (m) over joints, or None."""
     z = pose.xyz[list(joints), 2]
@@ -86,6 +93,7 @@ class Gesture:
         self._since: float | None = None
         self.done = False
         self.status = ""
+        self.score = 0.0  # soft 0..1 "how much does this look like the gesture right now"
 
     @property
     def progress(self) -> float:
@@ -98,9 +106,14 @@ class Gesture:
     def update(self, pose: Pose | None, now: float | None = None) -> bool:
         """Returns True exactly once, on the frame the gesture completes."""
         if self.done:
+            self.score = 1.0
             return False
         now = time.monotonic() if now is None else now
-        if pose is None or not self._check(pose, now):
+        if pose is None:
+            self.score = 0.0
+            self._since = None
+            return False
+        if not self._check(pose, now):
             self._since = None
             return False
         if self._since is None:
@@ -126,11 +139,19 @@ class Kneel(Gesture):
     def _check(self, pose: Pose, now: float) -> bool:
         if not pose.visible(Joint.LEFT_HIP, Joint.RIGHT_HIP, Joint.LEFT_KNEE, Joint.RIGHT_KNEE, *TORSO[:2]):
             self.status = "can't see your legs"
+            self.score = 0.0
             return False
         torso = _torso_length(pose)
         hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
         knee_y = _mid(pose, Joint.LEFT_KNEE, Joint.RIGHT_KNEE)[1]
-        hips_down = (knee_y - hip_y) < 0.45 * torso  # standing: roughly 1.0-1.3 torso lengths
+        drop = (knee_y - hip_y) / max(torso, 1.0)
+        hips_down = drop < 0.45  # standing: roughly 1.0-1.3 torso lengths
+        s_drop = _ramp(drop, 1.1, 0.45)
+        s_ankle = 1.0
+        if pose.visible(Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE):
+            shin = (_mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1] - knee_y) / max(torso, 1.0)
+            s_ankle = _ramp(shin, 0.8, 0.35)
+        self.score = s_drop * (0.4 + 0.6 * s_ankle)
         if not hips_down:
             self.status = "get lower"
             return False
@@ -157,6 +178,7 @@ class Bow(Gesture):
     def _check(self, pose: Pose, now: float) -> bool:
         if not pose.visible(Joint.NOSE, *TORSO):
             self.status = "stand where I can see you"
+            self.score = 0.0
             return False
         # Torso tilt from MediaPipe's metric landmarks: angle between shoulder->hip and straight down.
         sh = (pose.local[Joint.LEFT_SHOULDER] + pose.local[Joint.RIGHT_SHOULDER]) / 2
@@ -168,13 +190,17 @@ class Bow(Gesture):
         # Head must actually dip: nose at or below the shoulder line in the image.
         nose_y = pose.pixels[Joint.NOSE, 1]
         shoulder_y = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)[1]
-        head_down = nose_y >= shoulder_y - 0.1 * _shoulder_width(pose)
+        sw = _shoulder_width(pose)
+        head_down = nose_y >= shoulder_y - 0.1 * sw
+        s_head = _ramp((nose_y - shoulder_y) / sw, -0.7, -0.1)
+        self.score = _ramp(tilt, 15.0, self.min_tilt_deg) * (0.4 + 0.6 * s_head)
         # Not a squat/kneel: hips stay above the knees.
         if pose.visible(Joint.LEFT_KNEE, Joint.RIGHT_KNEE):
             hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
             knee_y = _mid(pose, Joint.LEFT_KNEE, Joint.RIGHT_KNEE)[1]
-            if knee_y - hip_y < 0.3 * _shoulder_width(pose):
+            if knee_y - hip_y < 0.3 * sw:
                 self.status = "that's not a bow"
+                self.score = 0.0
                 return False
         self.tilt_deg = tilt
         if tilt < self.min_tilt_deg or not head_down:
@@ -197,6 +223,7 @@ class JumpingJacks(Gesture):
         super().reset()
         self.count = 0
         self._open = False
+        self._cycle_times: deque[float] = deque()
 
     @property
     def progress(self) -> float:
@@ -207,6 +234,7 @@ class JumpingJacks(Gesture):
                   Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)
         if not pose.visible(*needed):
             self.status = f"{self.count}/{self.reps} (step back, I need your feet)"
+            self.score = 0.0
             return False
         sw = _shoulder_width(pose)
         nose_y = pose.pixels[Joint.NOSE, 1]
@@ -222,6 +250,13 @@ class JumpingJacks(Gesture):
         elif self._open and is_closed:
             self._open = False
             self.count += 1
+            self._cycle_times.append(now)
+        while self._cycle_times and now - self._cycle_times[0] > 3.0:
+            self._cycle_times.popleft()
+        arms = _ramp((shoulder_y - (wl + wr) / 2) / sw, 0.0, 1.2)
+        openness = 0.5 * arms + 0.5 * _ramp(feet, 0.8, 1.4)
+        recent = _ramp(len(self._cycle_times), 0, 2)
+        self.score = max(0.45 * openness, 0.5 * openness + 0.5 * recent)
         self.status = f"{self.count}/{self.reps}"
         return self.count >= self.reps
 
@@ -249,15 +284,18 @@ class Spin(Gesture):
 
     def _check(self, pose: Pose, now: float) -> bool:
         if not pose.visible(Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
+            self.score = 0.0
             return False
         signed = float(pose.pixels[Joint.RIGHT_SHOULDER, 0] - pose.pixels[Joint.LEFT_SHOULDER, 0])
         self._max_width = max(self._max_width, abs(signed))
+        while self._phases and now - self._phases[0][0] > self.window_s:
+            self._phases.popleft()
+        side_on = 1.0 - abs(signed) / self._max_width
+        self.score = max({0: 0.0, 1: 0.0, 2: 0.6}.get(len(self._phases), 0.6), 0.5 * _ramp(side_on, 0.4, 0.9))
         if abs(signed) / self._max_width < self.min_width:
             self.status = "turning…"
             return False  # side-on, ambiguous
         facing = 1 if signed > 0 else -1
-        while self._phases and now - self._phases[0][0] > self.window_s:
-            self._phases.popleft()
         if not self._phases or self._phases[-1][1] != facing:
             self._phases.append((now, facing))
         if len(self._phases) >= 3:  # facing -> away -> facing
@@ -278,15 +316,20 @@ class HeartHands(Gesture):
                   Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)
         if not pose.visible(*needed):
             self.status = "hands where I can see them"
+            self.score = 0.0
             return False
         sw = _shoulder_width(pose)
         nose_y = pose.pixels[Joint.NOSE, 1]
         wl, wr = pose.pixels[Joint.LEFT_WRIST], pose.pixels[Joint.RIGHT_WRIST]
         el, er = pose.pixels[Joint.LEFT_ELBOW], pose.pixels[Joint.RIGHT_ELBOW]
         above = wl[1] < nose_y and wr[1] < nose_y
-        together = float(np.linalg.norm(wl - wr)) < 0.6 * sw
+        gap = float(np.linalg.norm(wl - wr)) / sw
+        together = gap < 0.6
         wrist_mid_x = (wl[0] + wr[0]) / 2
-        flared = abs(el[0] - wrist_mid_x) > 0.5 * sw and abs(er[0] - wrist_mid_x) > 0.5 * sw
+        flare = min(abs(el[0] - wrist_mid_x), abs(er[0] - wrist_mid_x)) / sw
+        flared = flare > 0.5
+        s_above = _ramp((nose_y - (wl[1] + wr[1]) / 2) / sw, -0.3, 0.5)
+        self.score = s_above * _ramp(gap, 1.2, 0.4) * (0.5 + 0.5 * _ramp(flare, 0.2, 0.6))
         elbows_up = el[1] < pose.pixels[Joint.LEFT_SHOULDER, 1] and er[1] < pose.pixels[Joint.RIGHT_SHOULDER, 1]
         if not above:
             self.status = "higher, over your head"
@@ -322,16 +365,19 @@ class BlowKiss(Gesture):
 
     def _check(self, pose: Pose, now: float) -> bool:
         if not pose.visible(Joint.NOSE, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
+            self.score = 0.0
             return False
         sw = _shoulder_width(pose)
         mouth = pose.pixels[Joint.NOSE] + np.array([0.0, 0.25 * sw])  # just below the nose
         shoulder_y = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)[1]
         fired = False
+        nearest = 9.0
         for wrist in (Joint.LEFT_WRIST, Joint.RIGHT_WRIST):
             if not pose.visible(wrist):
                 self._at_mouth_since.pop(wrist, None)
                 continue
             d = float(np.linalg.norm(pose.pixels[wrist] - mouth)) / sw
+            nearest = min(nearest, d)
             z = pose.xyz[wrist, 2]
             z = None if np.isnan(z) else float(z)
             if d < 0.5:
@@ -352,6 +398,7 @@ class BlowKiss(Gesture):
                 outward = pose.pixels[wrist, 1] < shoulder_y + 0.3 * sw
                 if outward and (d > self.min_travel or toward_camera):
                     fired = True
+        self.score = 1.0 if fired else (0.7 if self._armed else 0.55 * _ramp(nearest, 1.2, 0.3))
         self.status = "mwah!" if fired else ("now throw it" if self._armed else "hand to your lips")
         return fired
 
@@ -370,6 +417,7 @@ class Kiss(Gesture):
     def _check(self, pose: Pose, now: float) -> bool:
         if not pose.visible(Joint.NOSE, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
             self.status = "come closer"
+            self.score = 0.0
             return False
         sw = _shoulder_width(pose)
         nose_z = pose.xyz[Joint.NOSE, 2]
@@ -381,6 +429,16 @@ class Kiss(Gesture):
             face = 2.5 * float(np.linalg.norm(pose.pixels[Joint.LEFT_EYE] - pose.pixels[Joint.RIGHT_EYE]))
         ratio = face / sw
 
+        s_close = max(
+            _ramp(nose_z, 1.1, self.max_nose_m) if not np.isnan(nose_z) else 0.0,
+            _ramp(shoulder_z, 1.4, 0.9) if (np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+            _ramp(ratio, 0.45, self.min_face_ratio),
+        )
+        s_lean = max(
+            _ramp(ratio, 0.45, self.min_face_ratio),
+            _ramp(shoulder_z - nose_z, 0.0, 0.15) if (not np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+        )
+        self.score = s_close * (0.5 + 0.5 * s_lean)
         close = (not np.isnan(nose_z) and nose_z < self.max_nose_m) or (
             np.isnan(nose_z) and shoulder_z is not None and shoulder_z < 0.9  # nose too close to read at all
         )
