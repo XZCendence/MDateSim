@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { findDate } from "../data/dates";
 import { PLAYER_PHONE_KEY, readSavedPhone, registerSavedPhone, type Registration } from "../lib/phone";
 import { smsLink } from "../lib/sms";
+import AffectionDelta from "../components/AffectionDelta";
 import { getMyRows, subscribeSpacetime } from "../lib/spacetime";
 import bgUrl from "../assets/characterselectbg.png";
 
@@ -98,6 +99,7 @@ export default function Start() {
           </div>
           <span className="start-affection-num">{mine.affection}</span>
         </div>
+        <AffectionDelta affection={mine.affection} />
       </div>
 
       <div className="start-card">

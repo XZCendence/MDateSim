@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AffectionDelta from "../components/AffectionDelta";
 import PoseView from "../components/PoseView";
 import type { Mood } from "../data/dates";
 import { useSession } from "../lib/session";
@@ -269,6 +270,7 @@ export default function DateScreen() {
           <span>♥</span>
           <div><div style={{ width: `${hearts}%` }} /></div>
           <span className="vn-affection-num">{mine.affection}</span>
+          <AffectionDelta affection={mine.affection} />
         </div>
         <button className="vn-leave" onClick={leave}>End date</button>
       </div>

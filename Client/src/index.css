@@ -181,7 +181,7 @@ button.ghost:hover { color: var(--text); }
   position: absolute; top: 16px; left: 16px; right: 16px; z-index: 60;
   display: flex; justify-content: space-between; align-items: center;
 }
-.vn-affection { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--accent); }
+.vn-affection { position: relative; display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--accent); }
 .vn-affection > div { width: 180px; height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
 .vn-affection > div > div { height: 100%; background: var(--accent); transition: width 0.6s; }
 .vn-affection-num { color: #fff; min-width: 2.5em; }
@@ -263,6 +263,7 @@ button.ghost:hover { color: var(--text); }
   padding: 10px 14px 12px; border-radius: 14px;
   background: rgba(15, 8, 20, 0.78); border: 2px solid var(--accent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: visible;
 }
 .start-hud-label {
   display: block; margin: 0 0 6px; font-size: 0.75rem; font-weight: 800;
@@ -274,6 +275,19 @@ button.ghost:hover { color: var(--text); }
 }
 .start-affection-fill { height: 100%; background: var(--accent); transition: width 0.4s; }
 .start-affection-num { color: #fff; min-width: 2.5em; font-size: 1.05rem; }
+.affection-delta {
+  position: absolute; left: calc(100% + 10px); top: 50%;
+  margin: 0; white-space: nowrap; pointer-events: none;
+  font-weight: 800; font-size: 1.15rem;
+  animation: affection-delta-out 1s ease-out forwards;
+}
+.affection-delta.up { color: #4ade80; }
+.affection-delta.down { color: #fb7185; }
+@keyframes affection-delta-out {
+  0% { opacity: 1; transform: translateY(-50%); }
+  70% { opacity: 1; transform: translateY(-50%); }
+  100% { opacity: 0; transform: translateY(calc(-50% - 10px)); }
+}
 .start-back { display: block; text-align: left; font-size: 0.85rem; color: #7a5a70; text-decoration: none; }
 .start-back:hover { text-decoration: underline; }
 .start-steps { list-style: none; display: flex; gap: 6px; padding: 0; margin: 0 0 16px; }
