@@ -14,6 +14,9 @@ upright_kneel = pose(skeleton({J.LEFT_KNEE: (535, 620), J.RIGHT_KNEE: (465, 620)
 results.append(check("upright kneel (thighs vertical)", run(g.Kneel(), hold(upright_kneel, 1.0)), True))
 feet_cropped = pose(skeleton(), hide=(J.LEFT_ANKLE, J.RIGHT_ANKLE))
 results.append(check("standing with feet out of frame", run(g.Kneel(), hold(feet_cropped, 1.0)), False))
+occluded = pose(skeleton({J.LEFT_KNEE: (535, 620), J.RIGHT_KNEE: (465, 620), J.LEFT_ANKLE: (535, 640), J.RIGHT_ANKLE: (465, 640)}),
+                hide=(J.LEFT_ANKLE, J.RIGHT_ANKLE))
+results.append(check("upright kneel, ankles hidden behind thighs", run(g.Kneel(), hold(occluded, 1.0)), True))
 hinted = g.Kneel(); hinted.hint = {"kneel": 0.9}
 results.append(check("learned model says kneel", run(hinted, hold(feet_cropped, 1.0)), True))
 
@@ -111,6 +114,15 @@ standing_clasped = pose(skeleton({J.LEFT_WRIST: (512, 380), J.RIGHT_WRIST: (488,
 results.append(check("kneeling, hands clasped", run(g.Beg(), hold(begging, 1.5)), True))
 results.append(check("kneeling, hands at sides", run(g.Beg(), hold(kneeling, 1.5)), False))
 results.append(check("standing, hands clasped", run(g.Beg(), hold(standing_clasped, 1.5)), False))
+# the real failure: ankles hidden, hands clasped a bit apart, and the learned model no longer says "kneel"
+beg_real = pose(skeleton({J.LEFT_HIP: (535, 480), J.RIGHT_HIP: (465, 480), J.LEFT_KNEE: (535, 620), J.RIGHT_KNEE: (465, 620),
+                          J.LEFT_ANKLE: (535, 640), J.RIGHT_ANKLE: (465, 640),
+                          J.LEFT_WRIST: (530, 400), J.RIGHT_WRIST: (470, 400), J.LEFT_ELBOW: (575, 420), J.RIGHT_ELBOW: (425, 420)}),
+                hide=(J.LEFT_ANKLE, J.RIGHT_ANKLE))
+b = g.Beg(); b.hint = {"kneel": 0.1, "idle": 0.6}
+results.append(check("beg: ankles hidden, loose clasp, model unsure", run(b, hold(beg_real, 1.5)), True))
+b2 = g.Beg()
+results.append(check("kneel then clasp while rising slightly", run(b2, hold(kneeling, 1.0) + hold(standing_clasped, 1.0, 1.0)), True))
 
 print("Factory")
 results.append(check("make() knows every name", all(isinstance(g.make(n), g.Gesture) for n in g.DATE_DETECTORS), True))

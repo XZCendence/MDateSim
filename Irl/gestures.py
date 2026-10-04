@@ -187,24 +187,21 @@ class Kneel(Gesture):
         hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
         knee_y = _mid(pose, Joint.LEFT_KNEE, Joint.RIGHT_KNEE)[1]
         drop = (knee_y - hip_y) / torso  # standing ~1.0, upright kneel ~0.8-1.0, sitting on heels < 0.45
-        ankles = bool(self._ankle_vis(pose) > 0.3)
-        shin = (_mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1] - knee_y) / torso if ankles else None
+        # Kneeling toward the camera hides the ankles behind the thighs. MediaPipe still estimates
+        # where they are, and that estimate is what we want: near knee height when kneeling, a full
+        # shin below the knees when standing (even if the feet are cropped out of frame).
+        shin = (_mid(pose, Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)[1] - knee_y) / torso
 
-        sat_back = drop < 0.45 and (shin is None or shin < 0.35)
-        upright = shin is not None and shin < 0.3
-        s_shin = _ramp(shin, 0.8, 0.3) if shin is not None else 0.0
-        s_sat = _ramp(drop, 1.1, 0.45) * (0.4 + 0.6 * (s_shin if shin is not None else 1.0))
+        sat_back = drop < 0.45 and shin < 0.4
+        upright = shin < 0.35
+        s_shin = _ramp(shin, 0.8, 0.35)
+        s_sat = _ramp(drop, 1.1, 0.45) * (0.4 + 0.6 * s_shin)
         self.score = max(s_shin, s_sat, learned)
 
         if sat_back or upright or learned >= self.LEARNED_MIN:
             self.status = "kneeling"
             return True
-        if drop < 0.45:
-            self.status = "that's a squat, knees on the floor"
-        elif shin is None:
-            self.status = "step back, I need to see your feet"
-        else:
-            self.status = "knees on the floor"
+        self.status = "that's a squat, knees on the floor" if drop < 0.45 else "knees on the floor"
         return False
 
     @staticmethod
@@ -593,19 +590,28 @@ class Look(Gesture):
 
 
 class Beg(Gesture):
-    """On your knees with your hands clasped in front of you."""
+    """On your knees with your hands together in front of you.
+
+    Deliberately forgiving. Clasping your hands changes how the kneel looks (to the learned model
+    and to the skeleton), so being down counts if the kneel check passes, nearly passes, or passed
+    within the last few seconds. Hands just need to be close together and above the hips.
+    """
 
     name = "beg"
-    hold_s = 1.0
+    hold_s = 0.5
+    KNEEL_MEMORY_S = 4.0
 
     def reset(self) -> None:
         super().reset()
         self._kneel = Kneel()
+        self._knelt_at: float | None = None
 
     def _check(self, pose: Pose, now: float) -> bool:
         self._kneel.hint = self.hint
-        kneeling = self._kneel._check(pose, now)
-        if not pose.visible(Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.NOSE, Joint.LEFT_HIP, Joint.RIGHT_HIP):
+        if self._kneel._check(pose, now) or self._kneel.score >= 0.5:
+            self._knelt_at = now
+        down = self._knelt_at is not None and now - self._knelt_at <= self.KNEEL_MEMORY_S
+        if not pose.visible(Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_HIP, Joint.RIGHT_HIP):
             self.status = "hands where I can see them"
             self.score = 0.3 * self._kneel.score
             return False
@@ -614,13 +620,13 @@ class Beg(Gesture):
         gap = float(np.linalg.norm(wl - wr)) / sw
         mid_y = float(wl[1] + wr[1]) / 2
         hip_y = _mid(pose, Joint.LEFT_HIP, Joint.RIGHT_HIP)[1]
-        raised = mid_y < hip_y - 0.2 * sw  # in front of the chest or face, not hanging at the sides
-        clasped = gap < 0.55 and raised
-        self.score = self._kneel.score * (0.3 + 0.7 * _ramp(gap, 1.4, 0.55) * (1.0 if raised else 0.3))
-        if not kneeling:
+        raised = mid_y < hip_y  # in front of the body, not hanging at the sides
+        together = gap < 0.85 and raised
+        self.score = max(self._kneel.score, 0.6 if down else 0.0) * (0.3 + 0.7 * _ramp(gap, 1.6, 0.85) * (1.0 if raised else 0.3))
+        if not down:
             self.status = "on your knees first"
             return False
-        if not clasped:
+        if not together:
             self.status = "hands together. beg."
             return False
         self.status = "begging"

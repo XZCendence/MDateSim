@@ -9,12 +9,13 @@ interface Props {
 }
 
 export default function DateCard({ date, onPick, selected = false }: Props) {
-  const [hovered, setHovered] = useState(false);
+  // Dev: open /lobby#hover to see the tooltips without a mouse.
+  const [hovered, setHovered] = useState(() => import.meta.env.DEV && window.location.hash === "#hover");
   const src = hovered && date.hoverImage ? date.hoverImage : date.image;
 
   return (
     <div
-      className={`date-char${selected ? " is-selected" : ""}`}
+      className={`date-char${selected ? " is-selected" : ""}${hovered ? " is-hovered" : ""}`}
       style={{ "--accent": date.accent } as CSSProperties}
     >
       <div className="date-picture">
@@ -37,6 +38,8 @@ export default function DateCard({ date, onPick, selected = false }: Props) {
         aria-label={`Ask ${date.name} out`}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
         onClick={() => onPick(date)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -45,9 +48,10 @@ export default function DateCard({ date, onPick, selected = false }: Props) {
           }
         }}
       />
-      <div className="char-tooltip">
+      <div className="char-tooltip" role="tooltip">
         <h2>{date.name}</h2>
         <p>{date.bio}</p>
+        <span className="char-cta">{selected ? "♥ Keep dating" : "♥ Ask out"}</span>
       </div>
     </div>
   );

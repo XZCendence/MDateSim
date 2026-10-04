@@ -52,9 +52,13 @@ a { color: inherit; }
   background: linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
   pointer-events: none;
 }
-.lobby-title {
-  max-width: 520px; width: 60%;
+.lobby-heading {
+  margin: 0; font-family: "DynaPuff", "Trebuchet MS", system-ui, sans-serif; font-weight: 700;
+  font-size: clamp(2.4rem, 5.2vw, 4.2rem); line-height: 1.05; letter-spacing: 0.02em; color: #fff;
+  text-shadow:
+    0 4px 0 #f0449a, 0 8px 0 #a01a63, 0 12px 18px rgba(0, 0, 0, 0.55), 0 0 34px rgba(244, 114, 182, 0.75);
 }
+.lobby-header { flex-direction: column; align-items: center !important; }
 .lobby-chars {
   display: flex; gap: 0; align-items: flex-end;
   width: 100%; justify-content: center; margin-top: auto;
@@ -77,27 +81,52 @@ a { color: inherit; }
 
 
 .char-tooltip {
-  font-family: 'Pony', system-ui, sans-serif;
-  visibility: hidden;
-  opacity: 0;
-  position: absolute;
-  bottom: calc(100% - 60px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  border: none;
-  border-radius: 0;
-  padding: 20px 24px;
-  width: 260px;
-  z-index: 10;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
+  font-family: "DynaPuff", "Trebuchet MS", system-ui, sans-serif;
+  position: absolute; top: 22%; left: 70%; z-index: 10; width: 310px; /* beside the character, toward the middle */
+  padding: 16px 20px 18px; text-align: center; pointer-events: none;
+  background: rgba(255, 244, 250, 0.97); color: #3b1d33;
+  border: 4px solid var(--accent); border-radius: 24px;
+  box-shadow: 0 8px 0 color-mix(in srgb, var(--accent) 60%, #2a0f24), 0 20px 44px rgba(0, 0, 0, 0.5);
+  visibility: hidden; opacity: 0;
+  transform: translateX(-18px) scale(0.9) rotate(-2deg); transform-origin: 0% 50%;
+  transition: opacity 0.16s ease, transform 0.22s cubic-bezier(0.2, 1.7, 0.4, 1), visibility 0s linear 0.16s;
 }
+/* speech-bubble tail */
+.char-tooltip::after {
+  content: ""; position: absolute; left: -15px; top: 44px; width: 22px; height: 22px;
+  background: rgba(255, 244, 250, 0.97); border-left: 4px solid var(--accent); border-bottom: 4px solid var(--accent);
+  transform: rotate(45deg); border-bottom-left-radius: 6px;
+}
+.char-tooltip h2 {
+  margin: 0 0 6px; font-weight: 700; font-size: 1.9rem; line-height: 1.1; letter-spacing: 0.02em; color: #fff;
+  /* accent outline + a hard drop: reads as a sticker */
+  text-shadow:
+    -2px -2px 0 var(--accent), 2px -2px 0 var(--accent), -2px 2px 0 var(--accent), 2px 2px 0 var(--accent),
+    0 -2px 0 var(--accent), 0 2px 0 var(--accent), -2px 0 0 var(--accent), 2px 0 0 var(--accent),
+    0 5px 0 color-mix(in srgb, var(--accent) 55%, #2a0f24), 0 9px 12px rgba(0, 0, 0, 0.25);
+}
+.char-tooltip p { margin: 0 0 12px; font-weight: 500; font-size: 1rem; line-height: 1.35; text-shadow: 0 1px 0 #fff; }
+.char-cta {
+  display: inline-block; padding: 5px 16px 7px; border-radius: 999px; font-weight: 700; font-size: 1rem; color: #fff;
+  background: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 60%, #2a0f24);
+  animation: char-cta-beat 1s ease-in-out infinite;
+}
+@keyframes char-cta-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+.date-char.is-hovered .char-tooltip,
 .date-char:has(.date-hitzone:hover) .char-tooltip {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: none;
+  visibility: visible; opacity: 1; transition-delay: 0s;
+  transform: translateX(0) scale(1) rotate(-2deg);
 }
+/* the character on the right gets a mirrored bubble, opening toward the middle */
+.date-char:nth-child(even) .char-tooltip { left: auto; right: 70%; transform-origin: 100% 50%; transform: translateX(18px) scale(0.9) rotate(2deg); }
+.date-char:nth-child(even) .char-tooltip::after {
+  left: auto; right: -15px; border-left: 0; border-bottom: 0; border-top: 4px solid var(--accent); border-right: 4px solid var(--accent);
+  border-radius: 0 6px 0 0;
+}
+.date-char:nth-child(even).is-hovered .char-tooltip,
+.date-char:nth-child(even):has(.date-hitzone:hover) .char-tooltip { transform: translateX(0) scale(1) rotate(2deg); }
+.date-char.is-hovered .date-picture img { filter: drop-shadow(0 0 18px var(--accent)); }
 
 .muted { color: var(--muted); }
 .small { font-size: 0.9rem; }
@@ -342,3 +371,117 @@ button.ghost:hover { color: var(--text); }
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9; margin: 0;
   padding: 14px 26px; font-size: 1.2rem; background: var(--accent); color: #fff; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
+
+/* ---- Heart-grid page transition (components/HeartWipe.tsx, WebGL) ---- */
+.hw-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1000; display: none; }
+
+/* ---- Title screen start button ---- */
+.title-start {
+  position: relative; z-index: 2; cursor: pointer; margin: 0;
+  font-family: "DynaPuff", "Trebuchet MS", system-ui, sans-serif; font-weight: 700;
+  font-size: clamp(2rem, 4.2vw, 3.4rem); line-height: 1; letter-spacing: 0.03em;
+  padding: 0.5em 1.6em 0.58em; border-radius: 999px; color: #fff;
+  background: linear-gradient(180deg, #ff86bd 0%, #f0449a 100%);
+  border: 5px solid #fff; text-shadow: 0 3px 0 rgba(160, 20, 90, 0.45);
+  box-shadow: 0 8px 0 #c2267a, 0 16px 34px rgba(120, 20, 90, 0.45);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  animation: title-start-bob 1.8s ease-in-out infinite;
+}
+.title-start:hover { filter: brightness(1.08); transform: translateY(-3px) scale(1.04); box-shadow: 0 11px 0 #c2267a, 0 22px 40px rgba(120, 20, 90, 0.5); animation-play-state: paused; }
+.title-start:active { transform: translateY(6px) scale(0.98); box-shadow: 0 2px 0 #c2267a, 0 6px 14px rgba(120, 20, 90, 0.4); }
+@keyframes title-start-bob { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.03); } }
+
+/* =====================================================================================
+   Polish pass: one look across the app. DynaPuff everywhere, sticker-style headings
+   (white fill, accent outline, hard drop), chunky "pressable" cards and buttons.
+   Styling only; appended last so it wins over the per-screen rules above.
+   ===================================================================================== */
+/* --accent-deep and --sticker depend on --accent, so they are re-derived wherever a screen sets
+   its character's accent; declared only at :root they would freeze to the default pink. */
+:root, .start, .vn, .date-char, .vn-gate, .start-affection {
+  --accent-deep: color-mix(in srgb, var(--accent) 60%, #2a0f24);
+  --sticker:
+    -2px -2px 0 var(--accent), 2px -2px 0 var(--accent), -2px 2px 0 var(--accent), 2px 2px 0 var(--accent),
+    0 -2px 0 var(--accent), 0 2px 0 var(--accent), -2px 0 0 var(--accent), 2px 0 0 var(--accent),
+    0 5px 0 var(--accent-deep), 0 9px 12px rgba(0, 0, 0, 0.25);
+}
+:root {
+  --font-ui: "DynaPuff", "Trebuchet MS", "Segoe UI", system-ui, sans-serif; /* headings, labels, buttons */
+  --font-dialog: "Alan Sans", "Segoe UI", system-ui, sans-serif; /* anything a character or the player says */
+  --ink: #3b1d33;
+}
+.start, .vn, .pose-view, .start-affection, .vn-gate-card { font-family: var(--font-ui); }
+.start button, .vn button, .start input, .vn input { font-family: var(--font-ui); }
+
+/* chunky buttons (not the quiet text-style ones) */
+.start-form button, .vn-reply button, .vn-gate-card button, .vn-sound {
+  border: 0; border-radius: 14px; padding: 10px 18px 12px; font-weight: 700; color: #fff;
+  background: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: 0 5px 0 var(--accent-deep); transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+}
+.start-form button:hover, .vn-reply button:hover, .vn-gate-card button:hover, .vn-sound:hover { filter: brightness(1.08); transform: translateY(-2px); box-shadow: 0 7px 0 var(--accent-deep); }
+.start-form button:active, .vn-reply button:active, .vn-gate-card button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--accent-deep); }
+
+/* ---- texting stage ---- */
+.start { padding-right: clamp(340px, 31vw, 480px); } /* keep the card clear of the pose view */
+.start-card {
+  border-radius: 26px; padding: 22px 26px 24px;
+  box-shadow: 0 9px 0 var(--accent-deep), 0 24px 50px rgba(0, 0, 0, 0.5);
+}
+.start-card h1 { margin: 8px 0 14px; font-weight: 700; font-size: 2.5rem; line-height: 1.05; letter-spacing: 0.02em; color: #fff; text-shadow: var(--sticker); }
+.start-back { font-weight: 500; }
+.start-steps li { font-weight: 600; font-size: 0.82rem; padding: 7px 4px 8px; }
+.start-steps li.now { box-shadow: 0 3px 0 var(--accent-deep); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+.start-lead { font-weight: 500; font-size: 1.12rem; line-height: 1.35; text-shadow: 0 1px 0 #fff; }
+.start-form input { border-radius: 14px; border-width: 3px; font-weight: 500; }
+.start-qr { border-width: 4px; border-radius: 20px; box-shadow: 0 6px 0 var(--accent-deep); }
+.start-number, .start-wait { font-weight: 500; }
+.start-chat { padding: 6px 4px; }
+.bubble { font-weight: 500; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.12); }
+.start-sprite { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 70%, transparent)) drop-shadow(0 12px 30px rgba(0, 0, 0, 0.5)); }
+
+/* ---- date screen ---- */
+.vn-dialogue {
+  border-radius: 24px; padding: 30px 28px 18px;
+  box-shadow: 0 9px 0 var(--accent-deep), 0 22px 50px rgba(0, 0, 0, 0.5);
+}
+.vn-name {
+  top: -26px; left: 26px; padding: 6px 22px 8px; border-radius: 16px; font-weight: 700; font-size: 1.35rem; letter-spacing: 0.02em;
+  border: 3px solid #fff; box-shadow: 0 5px 0 var(--accent-deep); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.28);
+}
+.vn-text { font-weight: 500; font-size: 1.5rem; line-height: 1.38; color: var(--ink); text-shadow: 0 1px 0 #fff; }
+.vn-you { font-weight: 500; }
+.vn-reply input { border-radius: 14px; border: 3px solid color-mix(in srgb, var(--accent) 45%, #fff); font-weight: 500; }
+.vn-reply input:focus { outline: none; border-color: var(--accent); }
+.vn-reply .vn-mic { background: #fff; color: var(--ink); text-shadow: none; border: 3px solid var(--accent); box-shadow: 0 5px 0 var(--accent-deep); }
+.vn-reply .vn-mic.is-on { background: #ef4444; border-color: #ef4444; color: #fff; box-shadow: 0 5px 0 #991b1b; }
+.vn-demand {
+  font-family: var(--font-ui); font-weight: 700; font-size: clamp(1.6rem, 3.2vw, 2.5rem); letter-spacing: 0.02em;
+  padding: 12px 30px 16px; border-radius: 22px; border: 4px solid #fff; background: var(--accent); color: #fff;
+  text-shadow: 0 3px 0 var(--accent-deep), 0 6px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 0 var(--accent-deep), 0 18px 40px rgba(0, 0, 0, 0.5);
+  animation: vn-demand-bob 1.1s ease-in-out infinite;
+}
+.vn-demand.is-met { background: #22c55e; border-color: #fff; color: #fff; text-shadow: 0 3px 0 #15803d; box-shadow: 0 8px 0 #15803d, 0 18px 40px rgba(0, 0, 0, 0.5); animation: vn-met-pop 0.35s cubic-bezier(0.2, 1.8, 0.4, 1); }
+@keyframes vn-demand-bob { 0%, 100% { transform: translateX(-50%) translateY(0) rotate(-1.5deg); } 50% { transform: translateX(-50%) translateY(-6px) rotate(1.5deg); } }
+@keyframes vn-met-pop { from { transform: translateX(-50%) scale(0.5); } to { transform: translateX(-50%) scale(1); } }
+.vn-leave { font-weight: 600; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(20, 8, 30, 0.6); padding: 8px 14px; }
+.vn-affection { font-weight: 700; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+.vn-affection > div { height: 16px; border: 3px solid #fff; background: rgba(20, 8, 30, 0.55); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+.vn-affection-num { font-size: 1.15rem; }
+.affection-delta { font-family: var(--font-ui); font-weight: 700; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+.vn-gate-card { border-radius: 26px; box-shadow: 0 9px 0 var(--accent-deep, #a01a63), 0 24px 50px rgba(0, 0, 0, 0.5); }
+.vn-gate-card h1 { font-weight: 700; color: #fff; text-shadow: var(--sticker); }
+.vn-gate-card p { font-weight: 500; }
+
+/* ---- pose view ---- */
+.pose-view { border: 3px solid var(--accent); border-radius: 18px; box-shadow: 0 6px 0 var(--accent-deep), 0 14px 34px rgba(0, 0, 0, 0.45); background: rgba(20, 10, 28, 0.9); }
+.pose-view-hud { font-weight: 600; font-size: 0.85rem; letter-spacing: 0.02em; }
+.pose-view-bar { height: 7px; }
+
+/* Dialogue is set in Alan Sans: the spoken line, what you said, the text bubbles, and what you type. */
+.vn-text, .vn-you, .bubble, .vn-reply input, .start-form input, .char-tooltip p { font-family: var(--font-dialog); }
+.vn-text { font-weight: 500; font-size: 1.6rem; line-height: 1.4; letter-spacing: 0.005em; }
+.vn-you { font-weight: 400; font-size: 1rem; }
+.bubble { font-weight: 400; font-size: 1.02rem; }
+.char-tooltip p { font-weight: 400; font-size: 1.02rem; }
