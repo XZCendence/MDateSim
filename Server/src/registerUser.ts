@@ -4,6 +4,8 @@
  * the player's number and the line Photon assigned.
  */
 
+import { speakAs } from "./voice";
+
 const PORT = 8787;
 const E164 = /^\+[1-9]\d{6,14}$/;
 const VITE_ORIGINS = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
@@ -147,9 +149,35 @@ async function readPhone(
   return { ok: true, phoneNumber };
 }
 
+/** GET or POST /api/tts {dateId, text} -> audio/mpeg in that date's voice. Key stays server-side. */
+async function handleTts(request: Request, url: URL, origin: string | null): Promise<Response> {
+  let dateId = url.searchParams.get("dateId") ?? "";
+  let text = url.searchParams.get("text") ?? "";
+  if (request.method === "POST") {
+    const body = (await request.json().catch(() => null)) as { dateId?: string; text?: string } | null;
+    dateId = body?.dateId ?? dateId;
+    text = body?.text ?? text;
+  }
+  if (!dateId || !text.trim()) return json(400, { error: "dateId and text are required" }, origin);
+  if (text.length > 600) return json(400, { error: "text too long" }, origin);
+  try {
+    const audio = await speakAs(dateId, text);
+    return new Response(audio, {
+      headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", ...corsHeaders(origin) },
+    });
+  } catch (err) {
+    console.error("[tts]", err);
+    return json(502, { error: "Could not synthesize speech" }, origin);
+  }
+}
+
 async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
+  if (url.pathname === "/api/tts") {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    return handleTts(request, url, origin);
+  }
   const users = url.pathname === "/api/users" || url.pathname === "/api/users/";
 
   if (request.method === "OPTIONS" && users) {

@@ -9,6 +9,8 @@ export interface Persona {
   name: string;
   /** First text the Client prefills; used to detect which date was picked. */
   intro: string;
+  /** xAI TTS voice id for IRL dates (GET https://api.x.ai/v1/tts/voices). */
+  voice: string;
   system: string;
 }
 
@@ -35,6 +37,7 @@ export const PERSONAS: Record<DateId, Persona> = {
     id: "bianca",
     name: "Bianca",
     intro: "hi bianca, it's me from the lobby",
+    voice: "ara",
     system: `${SHARED}
 
 You are Bianca "Em", 22, CS student and hackathon regular. Textbook tsundere with a yandere
@@ -67,6 +70,7 @@ streak that shows the more the player commits.
     id: "rin",
     name: "Ling Long",
     intro: "hey ling long, it's me from the lobby",
+    voice: "cosmo",
     system: `${SHARED}
 
 You are Ling Long, an engineer at Cluely, an early-stage AI startup in New York where everyone
