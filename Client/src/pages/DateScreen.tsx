@@ -267,8 +267,9 @@ export default function DateScreen() {
 
       <div className="vn-top">
         <div className="vn-affection" title={`Affection ${mine.affection}`}>
-          <span>♥</span>
+          <span className="affection-skull" aria-hidden>💀</span>
           <div><div style={{ width: `${hearts}%` }} /></div>
+          <span className="affection-heart" aria-hidden>❤</span>
           <span className="vn-affection-num">{mine.affection}</span>
           <AffectionDelta affection={mine.affection} />
         </div>

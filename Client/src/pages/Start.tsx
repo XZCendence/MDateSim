@@ -99,10 +99,11 @@ export default function Start() {
       <div className="start-hud" title={`Affection ${mine.affection}`}>
         <span className="start-hud-label">Affection</span>
         <div className="start-affection">
-          <span aria-hidden>♥</span>
+          <span className="affection-skull" aria-hidden>💀</span>
           <div className="start-affection-track">
             <div className="start-affection-fill" style={{ width: `${hearts}%` }} />
           </div>
+          <span className="affection-heart" aria-hidden>❤</span>
           <span className="start-affection-num">{mine.affection}</span>
         </div>
         <AffectionDelta affection={mine.affection} />
