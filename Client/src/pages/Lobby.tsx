@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import DateCard from "../components/DateCard";
 import { DATES, type DateProfile } from "../data/dates";
 import { startSession, useSession } from "../lib/session";
+import bgUrl from "../assets/characterselectbg.png";
+import previewUrl from "../assets/preview.png";
 
 export default function Lobby() {
   const navigate = useNavigate();
@@ -13,16 +15,14 @@ export default function Lobby() {
   }
 
   return (
-    <section>
-      <h1>
-        {session ? `You're dating ${session.character.name}` : "Pick your date"}
-      </h1>
-      <p className="muted">
-        {session
-          ? "Continue with your date or choose someone new."
-          : "Choose carefully. They'll remember."}
-      </p>
-      <div className="grid">
+    <div
+      className="lobby-bg"
+      style={{ backgroundImage: `url(${bgUrl})` }}
+    >
+      <div className="lobby-header">
+        <img src={previewUrl} alt="Choose your date" className="lobby-title" />
+      </div>
+      <div className="lobby-chars">
         {DATES.map((d) => (
           <DateCard
             key={d.id}
@@ -32,6 +32,6 @@ export default function Lobby() {
           />
         ))}
       </div>
-    </section>
+    </div>
   );
 }
