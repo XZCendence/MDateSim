@@ -85,8 +85,9 @@ export default function PoseView({ width = 320, height = 240 }: { width?: number
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 20);
-    camera.position.set(1.6, 1.1, 2.6);
-    camera.lookAt(0, 0.2, 0);
+    // Fixed view, slightly off-axis so depth still reads.
+    camera.position.set(0.7, 0.9, 2.8);
+    camera.lookAt(0, 0.1, 0);
 
     const grid = new THREE.GridHelper(4, 16, 0x3a3a50, 0x26263a);
     grid.position.y = -1.0; // roughly the floor for a standing adult (origin is mid-hip)
@@ -108,7 +109,6 @@ export default function PoseView({ width = 320, height = 240 }: { width?: number
     const m = new THREE.Matrix4();
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
     let raf = 0;
-    let spin = 0;
 
     const render = () => {
       raf = requestAnimationFrame(render);
@@ -140,10 +140,6 @@ export default function PoseView({ width = 320, height = 240 }: { width?: number
       } else {
         bones.visible = joints.visible = false;
       }
-      // slow orbit so the 3D reads as 3D
-      spin += 0.003;
-      camera.position.set(Math.sin(spin) * 2.8, 1.1, Math.cos(spin) * 2.8);
-      camera.lookAt(0, 0.1, 0);
       renderer.render(scene, camera);
     };
     render();
