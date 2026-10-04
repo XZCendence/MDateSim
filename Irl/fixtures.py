@@ -72,5 +72,5 @@ opened = pose(skeleton({J.LEFT_WRIST: (600, 150), J.RIGHT_WRIST: (400, 150),
                         J.LEFT_ANKLE: (600, 760), J.RIGHT_ANKLE: (400, 760)}))
 heart = pose(skeleton({J.LEFT_WRIST: (515, 120), J.RIGHT_WRIST: (485, 120),
                        J.LEFT_ELBOW: (610, 220), J.RIGHT_ELBOW: (390, 220)}))
-leaning_close = pose(skeleton({J.LEFT_EAR: (560, 225), J.RIGHT_EAR: (440, 225)}),
-                     depth={J.NOSE: 0.45, J.LEFT_SHOULDER: 0.75, J.RIGHT_SHOULDER: 0.75})
+leaning_close = pose(skeleton({J.LEFT_EAR: (580, 225), J.RIGHT_EAR: (420, 225)}),
+                     depth={J.NOSE: 0.3, J.LEFT_SHOULDER: 0.6, J.RIGHT_SHOULDER: 0.6})

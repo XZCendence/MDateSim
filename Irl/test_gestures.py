@@ -55,13 +55,16 @@ late = hold(at_mouth, 0.3, 0) + hold(standing, 1.5, 0.4) + hold(thrown, 0.2, 2.0
 results.append(check("released too late", run(g.BlowKiss(), late), False))
 
 print("Kiss")
-no_depth_close = pose(skeleton({J.LEFT_EAR: (560, 225), J.RIGHT_EAR: (440, 225)}),
-                      depth={J.NOSE: None, J.LEFT_SHOULDER: 0.8, J.RIGHT_SHOULDER: 0.8})
+no_depth_close = pose(skeleton({J.LEFT_EAR: (580, 225), J.RIGHT_EAR: (420, 225)}),
+                      depth={J.NOSE: None, J.LEFT_SHOULDER: 0.5, J.RIGHT_SHOULDER: 0.5})
 results.append(check("close, depth dropped out", run(g.Kiss(), hold(no_depth_close, 1.0)), True))
 upright_far = pose(skeleton(), depth={J.NOSE: 2.0})
 results.append(check("upright far", run(g.Kiss(), hold(upright_far, 1.0)), False))
 close_upright = pose(skeleton(), depth={J.NOSE: 0.5, J.LEFT_SHOULDER: 0.55, J.RIGHT_SHOULDER: 0.55})
 results.append(check("close but upright", run(g.Kiss(), hold(close_upright, 1.0)), False))
+arms_length = pose(skeleton({J.LEFT_EAR: (560, 225), J.RIGHT_EAR: (440, 225)}),
+                   depth={J.NOSE: 0.45, J.LEFT_SHOULDER: 0.75, J.RIGHT_SHOULDER: 0.75})
+results.append(check("leaning at arm's length is not a kiss", run(g.Kiss(), hold(arms_length, 1.0)), False))
 
 print("Factory")
 results.append(check("make() knows every name", all(isinstance(g.make(n), g.Gesture) for n in g.DETECTORS), True))

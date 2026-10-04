@@ -409,9 +409,9 @@ class Kiss(Gesture):
     name = "kiss"
     hold_s = 0.4
 
-    def __init__(self, max_nose_m: float = 0.55, min_face_ratio: float = 0.9):
+    def __init__(self, max_nose_m: float = 0.35, min_face_ratio: float = 1.4):
         self.max_nose_m = max_nose_m
-        self.min_face_ratio = min_face_ratio  # ear-to-ear width / shoulder width; ~0.4 when upright
+        self.min_face_ratio = min_face_ratio  # ear-to-ear / shoulder width; ~0.4 upright, >1.4 with the face at the lens
         super().__init__()
 
     def _check(self, pose: Pose, now: float) -> bool:
@@ -430,20 +430,20 @@ class Kiss(Gesture):
         ratio = face / sw
 
         s_close = max(
-            _ramp(nose_z, 1.1, self.max_nose_m) if not np.isnan(nose_z) else 0.0,
-            _ramp(shoulder_z, 1.4, 0.9) if (np.isnan(nose_z) and shoulder_z is not None) else 0.0,
-            _ramp(ratio, 0.45, self.min_face_ratio),
+            _ramp(nose_z, 0.9, self.max_nose_m) if not np.isnan(nose_z) else 0.0,
+            _ramp(shoulder_z, 1.0, 0.6) if (np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+            _ramp(ratio, 0.6, self.min_face_ratio),
         )
         s_lean = max(
-            _ramp(ratio, 0.45, self.min_face_ratio),
-            _ramp(shoulder_z - nose_z, 0.0, 0.15) if (not np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+            _ramp(ratio, 0.6, self.min_face_ratio),
+            _ramp(shoulder_z - nose_z, 0.05, 0.25) if (not np.isnan(nose_z) and shoulder_z is not None) else 0.0,
         )
         self.score = s_close * (0.5 + 0.5 * s_lean)
         close = (not np.isnan(nose_z) and nose_z < self.max_nose_m) or (
-            np.isnan(nose_z) and shoulder_z is not None and shoulder_z < 0.9  # nose too close to read at all
+            np.isnan(nose_z) and shoulder_z is not None and shoulder_z < 0.6  # nose too close to read at all
         )
         leaning = ratio > self.min_face_ratio or (
-            not np.isnan(nose_z) and shoulder_z is not None and (shoulder_z - nose_z) > 0.15
+            not np.isnan(nose_z) and shoulder_z is not None and (shoulder_z - nose_z) > 0.25
         )
         if close and leaning:
             self.status = "💋"
