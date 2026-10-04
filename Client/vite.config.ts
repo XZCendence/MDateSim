@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
 const bindings = fileURLToPath(
@@ -11,7 +12,7 @@ const moduleSrc = fileURLToPath(
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     // Single source of truth: the generated SpacetimeDB bindings live in Server/.
     alias: { "@bindings": bindings },
