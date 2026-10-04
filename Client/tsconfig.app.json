@@ -1,11 +1,15 @@
 {
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    "target": "es2024",
+    "lib": ["ES2025", "ESNext.Disposable", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
-    "paths": { "@bindings/*": ["./../Server/src/module_bindings/*"] },
+    "paths": {
+      "@bindings/*": ["./../Server/src/module_bindings/*"],
+      "spacetimedb": ["./node_modules/spacetimedb"],
+      "spacetimedb/*": ["./node_modules/spacetimedb/*"]
+    },
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
@@ -17,10 +21,6 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src", "../Server/src/module_bindings"]

@@ -1,7 +1,8 @@
+import { type DateId } from "../spacetimedb/src/dateIds";
+
 /**
  * The dates' personalities for the iMessage loop.
- * Ids and intro lines match Client/src/data/dates.ts so the QR's prefilled
- * first text tells us which date the player picked.
+ * Ids come from the shared roster keys so they match the client and the module.
  */
 export interface Persona {
   id: string;
@@ -17,11 +18,16 @@ You are a character in a dating sim. The player is on a date with you through te
 sometimes, in person in front of a Kinect camera that can see their body. When the mood
 calls for it you may demand they physically do something (bow, squat, hold still, jumping
 jacks) and react to whether they did it. Stay in character no matter what. Never mention
-being an AI.`;
+being an AI.
 
-export const PERSONAS: Record<string, Persona> = {
-  sakura: {
-    id: "sakura",
+When you want them to physically do something, end your message with exactly one tag on
+its own, like [demand:kneel]. Allowed tags: kneel, bow, jacks, dance, heart, blow_kiss, kiss.
+Use a tag at most once every few messages, only when it fits the mood, and never explain
+the tag. If a demand is still open, don't issue a new one; nag about the old one instead.`;
+
+export const PERSONAS: Record<DateId, Persona> = {
+  bianca: {
+    id: "bianca",
     name: "Bianca",
     intro: "hi bianca, it's me from the lobby",
     system: `${SHARED}
@@ -40,7 +46,7 @@ and dare the player to do squats or jumping jacks on camera to prove themselves.
   },
 };
 
-export const DEFAULT_PERSONA = PERSONAS.sakura!;
+export const DEFAULT_PERSONA = PERSONAS.bianca;
 
 /** Pick a persona from the player's first text, if it matches a Client intro line. */
 export function personaFromIntro(text: string): Persona | undefined {

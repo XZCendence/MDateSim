@@ -6,10 +6,21 @@ import {
   type InferSchema,
   type ReducerCtx,
 } from 'spacetimedb/server';
-
-const DATE_IDS = ['sakura', 'rin'] as const;
+import type { Identity } from 'spacetimedb';
+import { DATE_IDS } from './dateIds';
 const PHASES = ['texting', 'irl'] as const;
-const DEMANDS = ['bow', 'squat', 'still', 'jacks', 'wave'] as const;
+const DEMANDS = [
+  'kneel',
+  'bow',
+  'jacks',
+  'dance',
+  'heart',
+  'blow_kiss',
+  'kiss',
+  'squat',
+  'still',
+  'wave',
+] as const; // keep in sync with Irl/gestures.py DETECTORS
 
 const player = table(
   { name: 'player', public: true },
@@ -39,7 +50,62 @@ const dateState = table(
   }
 );
 
-const spacetimedb = schema({ player, gameSession, dateState });
+// ---- Conversation + relationship state (keyed by player identity) ----
+// Written by Server/src/imessage.ts (the texting loop) and Irl/ (Kinect),
+// which connect with their own identities, so these reducers take the player
+// explicitly instead of using ctx.sender.
+
+const message = table(
+  { name: 'message', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    player: t.identity().index('btree'),
+    role: t.string(), // "user" | "assistant"
+    text: t.string(),
+    sentAt: t.timestamp(),
+  }
+);
+
+const affection = table(
+  { name: 'affection', public: true },
+  {
+    player: t.identity().primaryKey(),
+    value: t.i32(), // -100 .. 100
+  }
+);
+
+const irlDate = table(
+  { name: 'irl_date', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    player: t.identity().index('btree'),
+    scheduledFor: t.timestamp(),
+    activity: t.string(),
+    status: t.string(), // "scheduled" | "active" | "done" | "cancelled"
+    createdAt: t.timestamp(),
+  }
+);
+
+const gestureEvent = table(
+  { name: 'gesture_event', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    player: t.identity().index('btree'),
+    gesture: t.string(), // one of DEMANDS
+    success: t.bool(),
+    at: t.timestamp(),
+  }
+);
+
+const spacetimedb = schema({
+  player,
+  gameSession,
+  dateState,
+  message,
+  affection,
+  irlDate,
+  gestureEvent,
+});
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
@@ -64,7 +130,7 @@ function requireDateState(ctx: Ctx) {
 
 function requireDateId(dateId: string): void {
   if (!isOneOf(dateId, DATE_IDS)) {
-    throw new SenderError('dateId must be sakura or rin');
+    throw new SenderError('dateId must be bianca or rin');
   }
 }
 
@@ -76,7 +142,7 @@ function requirePhase(phase: string): void {
 
 function requireDemand(demand: string): void {
   if (!isOneOf(demand, DEMANDS)) {
-    throw new SenderError('demand must be bow, squat, still, jacks, or wave');
+    throw new SenderError(`demand must be one of ${DEMANDS.join(', ')}`);
   }
 }
 
@@ -199,5 +265,126 @@ export const claimSession = spacetimedb.reducer(
 
     const session = matches[0]!;
     ctx.db.gameSession.player.update({ ...session, spaceId });
+  }
+);
+
+// ---- Conversation + relationship reducers ----
+
+const ROLES = ['user', 'assistant'] as const;
+const DATE_STATUSES = ['scheduled', 'active', 'done', 'cancelled'] as const;
+const AFFECTION_MIN = -100;
+const AFFECTION_MAX = 100;
+
+function clampAffection(value: number): number {
+  return Math.max(AFFECTION_MIN, Math.min(AFFECTION_MAX, value));
+}
+
+function bumpAffection(ctx: Ctx, player: Identity, delta: number): void {
+  const row = ctx.db.affection.player.find(player);
+  if (row == null) {
+    ctx.db.affection.insert({ player, value: clampAffection(delta) });
+  } else {
+    ctx.db.affection.player.update({ ...row, value: clampAffection(row.value + delta) });
+  }
+}
+
+function requireSessionFor(ctx: Ctx, player: Identity): void {
+  if (ctx.db.gameSession.player.find(player) == null) {
+    throw new SenderError('no game session for player');
+  }
+}
+
+/** Append one line of the iMessage conversation. Called by the texting loop. */
+export const logMessage = spacetimedb.reducer(
+  { player: t.identity(), role: t.string(), text: t.string() },
+  (ctx, { player, role, text }) => {
+    requireSessionFor(ctx, player);
+    if (!isOneOf(role, ROLES)) {
+      throw new SenderError('role must be user or assistant');
+    }
+    ctx.db.message.insert({ id: 0n, player, role, text, sentAt: ctx.timestamp });
+  }
+);
+
+/** Forget the conversation (keeps the session and affection). */
+export const clearMessages = spacetimedb.reducer(
+  { player: t.identity() },
+  (ctx, { player }) => {
+    for (const row of [...ctx.db.message.player.filter(player)]) {
+      ctx.db.message.id.delete(row.id);
+    }
+  }
+);
+
+export const adjustAffection = spacetimedb.reducer(
+  { player: t.identity(), delta: t.i32() },
+  (ctx, { player, delta }) => {
+    requireSessionFor(ctx, player);
+    bumpAffection(ctx, player, delta);
+  }
+);
+
+/** The player (from the lobby) books an IRL date. */
+export const scheduleIrlDate = spacetimedb.reducer(
+  { scheduledFor: t.timestamp(), activity: t.string() },
+  (ctx, { scheduledFor, activity }) => {
+    requireSessionFor(ctx, ctx.sender);
+    if (activity === '') {
+      throw new SenderError('activity must not be empty');
+    }
+    ctx.db.irlDate.insert({
+      id: 0n,
+      player: ctx.sender,
+      scheduledFor,
+      activity,
+      status: 'scheduled',
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
+export const setIrlDateStatus = spacetimedb.reducer(
+  { id: t.u64(), status: t.string() },
+  (ctx, { id, status }) => {
+    const row = ctx.db.irlDate.id.find(id);
+    if (row == null) {
+      throw new SenderError('no irl date with that id');
+    }
+    if (!isOneOf(status, DATE_STATUSES)) {
+      throw new SenderError('status must be scheduled, active, done, or cancelled');
+    }
+    ctx.db.irlDate.id.update({ ...row, status });
+  }
+);
+
+/** Texting loop (a different identity) sets or clears a demand on the player's behalf. */
+export const setDemandFor = spacetimedb.reducer(
+  { player: t.identity(), demand: t.string() },
+  (ctx, { player, demand }) => {
+    const state = ctx.db.dateState.player.find(player);
+    if (state == null) {
+      throw new SenderError('no date state for player');
+    }
+    if (demand === '') {
+      ctx.db.dateState.player.update({ ...state, demand: undefined, demandMet: false });
+      return;
+    }
+    requireDemand(demand);
+    ctx.db.dateState.player.update({ ...state, demand, demandMet: false });
+  }
+);
+
+/** Kinect reports a gesture attempt; affection moves with it and the open demand is resolved. */
+export const recordGesture = spacetimedb.reducer(
+  { player: t.identity(), gesture: t.string(), success: t.bool(), affectionDelta: t.i32() },
+  (ctx, { player, gesture, success, affectionDelta }) => {
+    requireSessionFor(ctx, player);
+    requireDemand(gesture);
+    ctx.db.gestureEvent.insert({ id: 0n, player, gesture, success, at: ctx.timestamp });
+    bumpAffection(ctx, player, affectionDelta);
+    const state = ctx.db.dateState.player.find(player);
+    if (state != null && state.demand === gesture && success) {
+      ctx.db.dateState.player.update({ ...state, demandMet: true });
+    }
   }
 );
