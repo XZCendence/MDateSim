@@ -17,7 +17,8 @@ import { routes } from "./registerUser";
 import { formatDelta, inferDemand, splitReply } from "./reply";
 import { transcribe } from "./voice";
 
-const IRL_DEMANDS = ["look", "kneel", "beg", "bow", "jacks", "dance", "heart", "blow_kiss", "kiss"] as const;
+// Jumping jacks are parked for the demo (detection was unreliable); the detector still exists in Irl/.
+const IRL_DEMANDS = ["look", "kneel", "beg", "bow", "dance", "heart", "blow_kiss", "kiss"] as const;
 const DEMAND_HINTS: Record<string, string> = {
   look: "face you and hold eye contact",
   kneel: "get on their knees",
@@ -115,7 +116,8 @@ bad ones: mid-conversation, right after they just did something, the moment they
 To make them do something, say it in your own words AND end with one tag, written EXACTLY like
 [demand:kneel] (the word demand, a colon, the name). Without the tag the camera does not check. Allowed tags:
 ${IRL_DEMANDS.map((d) => `[demand:${d}] (${DEMAND_HINTS[d]})`).join(", ")}.
-At most one demand tag per line, and never while another demand is still open.${run.demand ? `\nOpen demand: "${run.demand}" (${DEMAND_HINTS[run.demand] ?? run.demand}). They have not done it yet.` : "\nNo demand is open."}
+At most one demand tag per line, and never while another demand is still open.
+Never ask for jumping jacks, squats, push-ups or any exercise not in that list; the camera cannot judge them.${run.demand ? `\nOpen demand: "${run.demand}" (${DEMAND_HINTS[run.demand] ?? run.demand}). They have not done it yet.` : "\nNo demand is open."}
 Your affection for them is ${affection} (-100 to 100); let it color your tone.
 Lines in [square brackets] from the user are stage directions describing what just happened. Never
 read them aloud or mention the camera system. End every line with an affection tag as usual.`;

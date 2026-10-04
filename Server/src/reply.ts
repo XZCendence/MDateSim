@@ -10,7 +10,7 @@ const BRACKETED = /\[([^\[\]\n]{1,60})\]/g;
 const I32_MIN = -2147483648;
 const I32_MAX = 2147483647;
 
-export const DEMAND_NAMES = ["look", "beg", "kneel", "bow", "jacks", "dance", "heart", "blow_kiss", "kiss"] as const;
+export const DEMAND_NAMES = ["look", "beg", "kneel", "bow", "dance", "heart", "blow_kiss", "kiss"] as const;
 
 const DEMAND_ALIASES: Record<string, string> = {
   jumping_jacks: "jacks",
@@ -81,7 +81,6 @@ export function splitReply(reply: string): { text: string; demand?: string; affe
 export function inferDemand(text: string): string | undefined {
   const t = text.toLowerCase();
   const rules: [RegExp, string][] = [
-    [/\bjumping jacks?\b/, "jacks"],
     [/\bbeg\b(?! (your|my) pardon)/, "beg"],
     [/\b(get|go|down) on your knees\b|\bkneel\b(?! ?(ed|ing))/, "kneel"],
     [/\bblow (me )?a kiss\b/, "blow_kiss"],
