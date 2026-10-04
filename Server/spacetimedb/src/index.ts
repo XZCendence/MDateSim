@@ -296,6 +296,44 @@ export const claimSession = spacetimedb.reducer(
   }
 );
 
+/** Like claimSession, but when several lobby sessions for `dateId` are unclaimed, take the
+ * newest one (the player who just clicked) instead of refusing. Stale ones stay unclaimed. */
+export const claimLatestSession = spacetimedb.reducer(
+  { dateId: t.string(), spaceId: t.string() },
+  (ctx, { dateId, spaceId }) => {
+    requireDateId(dateId);
+    if (spaceId === '') {
+      throw new SenderError('spaceId must not be empty');
+    }
+    // Drop any older link this thread had, so one spaceId maps to one live session.
+    for (const row of [...ctx.db.gameSession.iter()]) {
+      if (row.spaceId === spaceId) {
+        ctx.db.gameSession.player.update({ ...row, spaceId: undefined });
+      }
+    }
+    let newest: ReturnType<typeof ctx.db.gameSession.player.find> = null;
+    for (const row of ctx.db.gameSession.iter()) {
+      if (row.dateId !== dateId || !optionIsEmpty(row.spaceId)) continue;
+      if (newest == null || row.startedAt.microsSinceUnixEpoch > newest.startedAt.microsSinceUnixEpoch) {
+        newest = row;
+      }
+    }
+    if (newest == null) {
+      throw new SenderError('no unclaimed session for dateId');
+    }
+    ctx.db.gameSession.player.update({ ...newest, spaceId });
+  }
+);
+
+/** Detach an iMessage thread from whatever session holds it (used by /reset). */
+export const unlinkSpace = spacetimedb.reducer({ spaceId: t.string() }, (ctx, { spaceId }) => {
+  for (const row of [...ctx.db.gameSession.iter()]) {
+    if (row.spaceId === spaceId) {
+      ctx.db.gameSession.player.update({ ...row, spaceId: undefined });
+    }
+  }
+});
+
 // ---- Conversation + relationship reducers ----
 
 const ROLES = ['user', 'assistant'] as const;

@@ -54,7 +54,7 @@ export default function Dates() {
     <section>
       <h1>IRL dates with {date.name}</h1>
       <p className="muted">
-        When the date starts, she takes over. Stand in front of the Kinect and do what she says.
+        When the date starts, {date.name} takes over. Stand in front of the Kinect and do what you're told.
       </p>
       <p className="row">
         {mine.phase === "irl" ? (
@@ -67,7 +67,7 @@ export default function Dates() {
         Affection: <strong>{mine.affection}</strong>
         {mine.demand && (
           <>
-            {" · "}She wants you to <strong>{mine.demand}</strong>
+            {" · "}{date.name} wants you to <strong>{mine.demand}</strong>
             {mine.demandMet ? " (done)" : " (waiting)"}
           </>
         )}
