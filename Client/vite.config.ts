@@ -20,5 +20,8 @@ export default defineConfig({
   },
   server: {
     fs: { allow: [".", bindings, moduleSrc] },
+    proxy: {
+      "/api": "http://127.0.0.1:8787",
+    },
   },
 });

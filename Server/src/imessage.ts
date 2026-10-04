@@ -3,9 +3,12 @@ import { Spectrum } from "spectrum-ts";
 import { imessage } from "@spectrum-ts/imessage";
 import { chat, type ChatMessage } from "./grok";
 import { DEFAULT_PERSONA, PERSONAS, personaFromIntro, type Persona } from "./personas";
+import { startUserRegistrationServer } from "./registerUser";
 
 const personaById = (id: string): Persona => (PERSONAS as Record<string, Persona>)[id] ?? DEFAULT_PERSONA;
 import { connectSpacetime } from "./db";
+
+startUserRegistrationServer();
 
 // Spectrum bridges a single agent loop to many messaging interfaces.
 // Docs: https://photon.codes/docs/spectrum-ts
