@@ -63,7 +63,15 @@ async function claimSession(spaceId: string, dateId: string) {
     console.warn(`[${spaceId}] could not claim a session for ${dateId}:`, String(err));
     return undefined;
   }
-  const session = sessionForSpace(spaceId);
+  // The reducer commits synchronously, but the subscription cache update arrives
+  // asynchronously over the same WebSocket. Poll until the cache reflects the new
+  // session (dateId matches) so we call startFresh on the right player identity.
+  let session = sessionForSpace(spaceId);
+  const deadline = Date.now() + 2000;
+  while ((!session || session.dateId !== dateId) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    session = sessionForSpace(spaceId);
+  }
   if (session) {
     await startFresh(session.player, spaceId);
     console.log(`[${spaceId}] claimed ${dateId} session for ${session.player.toHexString().slice(0, 10)}…`);
