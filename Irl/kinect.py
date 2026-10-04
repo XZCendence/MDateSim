@@ -30,12 +30,25 @@ class Kinect:
         intrinsics = self._device.calibration.color_params
         self.fx, self.fy = intrinsics.fx, intrinsics.fy
         self.cx, self.cy = intrinsics.cx, intrinsics.cy
+        self.dropped = 0
 
     def read(self) -> Frame | None:
         """Block until the next capture. Returns None if the capture was unusable."""
-        capture = self._device.update()
-        ok_color, color = capture.get_color_image()
-        ok_depth, depth = capture.get_transformed_depth_image()
+        try:
+            capture = self._device.update()
+            ok_color, color = capture.get_color_image()
+            ok_depth, depth = capture.get_transformed_depth_image()
+        except SystemExit:
+            # pykinect calls sys.exit() on a dropped capture ("Get capture failed!").
+            # One bad frame shouldn't take the whole date down; report it and carry on.
+            self.dropped += 1
+            if self.dropped in (1, 10, 100) or self.dropped % 1000 == 0:
+                print(f"[kinect] dropped capture #{self.dropped}, continuing")
+            return None
+        except Exception as err:  # invalid capture handle etc.
+            self.dropped += 1
+            print(f"[kinect] capture error ({err}); continuing")
+            return None
         if not (ok_color and ok_depth) or color is None:
             return None
         return Frame(color=color, depth=depth)
