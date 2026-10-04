@@ -211,18 +211,28 @@ class Bow(Gesture):
 
 
 class JumpingJacks(Gesture):
-    """Count full open/close cycles: arms overhead + feet apart, then arms down + feet together."""
+    """Arm cadence only: both wrists swing from below the shoulders to above the head and back.
+
+    Feet are ignored on purpose (they're often out of frame or jittery). A rep is a
+    down -> up -> down cycle that takes between `min_cycle_s` and `max_cycle_s`.
+    """
 
     name = "jacks"
 
-    def __init__(self, reps: int = 5):
+    def __init__(self, reps: int = 5, up_level: float = 0.6, down_level: float = 0.0,
+                 min_cycle_s: float = 0.3, max_cycle_s: float = 2.5):
         self.reps = reps
+        self.up_level = up_level  # mean wrist height above the shoulder line, in shoulder widths
+        self.down_level = down_level
+        self.min_cycle_s = min_cycle_s
+        self.max_cycle_s = max_cycle_s
         super().__init__()
 
     def reset(self) -> None:
         super().reset()
         self.count = 0
-        self._open = False
+        self._phase = "down"
+        self._cycle_start: float | None = None
         self._cycle_times: deque[float] = deque()
 
     @property
@@ -230,34 +240,38 @@ class JumpingJacks(Gesture):
         return 1.0 if self.done else min(1.0, self.count / self.reps)
 
     def _check(self, pose: Pose, now: float) -> bool:
-        needed = (Joint.NOSE, Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER,
-                  Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)
+        needed = (Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)
         if not pose.visible(*needed):
-            self.status = f"{self.count}/{self.reps} (step back, I need your feet)"
+            self.status = f"{self.count}/{self.reps} (show me both arms)"
             self.score = 0.0
             return False
         sw = _shoulder_width(pose)
-        nose_y = pose.pixels[Joint.NOSE, 1]
         shoulder_y = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)[1]
         wl, wr = pose.pixels[Joint.LEFT_WRIST, 1], pose.pixels[Joint.RIGHT_WRIST, 1]
-        feet = float(abs(pose.pixels[Joint.LEFT_ANKLE, 0] - pose.pixels[Joint.RIGHT_ANKLE, 0])) / sw
+        height = (shoulder_y - (wl + wr) / 2) / sw  # >0 above the shoulders
+        both_up = wl < shoulder_y - self.up_level * sw and wr < shoulder_y - self.up_level * sw
+        both_down = wl > shoulder_y - self.down_level * sw and wr > shoulder_y - self.down_level * sw
 
-        is_open = wl < nose_y and wr < nose_y and feet > 1.3
-        is_closed = wl > shoulder_y and wr > shoulder_y and feet < 0.9
-
-        if not self._open and is_open:
-            self._open = True
-        elif self._open and is_closed:
-            self._open = False
-            self.count += 1
-            self._cycle_times.append(now)
-        while self._cycle_times and now - self._cycle_times[0] > 3.0:
+        hint = ""
+        if self._phase == "down" and both_up:
+            self._phase = "up"
+            if self._cycle_start is None:
+                self._cycle_start = now
+        elif self._phase == "up" and both_down:
+            self._phase = "down"
+            took = now - (self._cycle_start if self._cycle_start is not None else now)
+            self._cycle_start = now
+            if self.min_cycle_s <= took <= self.max_cycle_s:
+                self.count += 1
+                self._cycle_times.append(now)
+            elif took > self.max_cycle_s:
+                hint = " (faster!)"
+        while self._cycle_times and now - self._cycle_times[0] > 4.0:
             self._cycle_times.popleft()
-        arms = _ramp((shoulder_y - (wl + wr) / 2) / sw, 0.0, 1.2)
-        openness = 0.5 * arms + 0.5 * _ramp(feet, 0.8, 1.4)
+
         recent = _ramp(len(self._cycle_times), 0, 2)
-        self.score = max(0.45 * openness, 0.5 * openness + 0.5 * recent)
-        self.status = f"{self.count}/{self.reps}"
+        self.score = max(0.4 * _ramp(height, 0.0, 1.0), 0.5 * _ramp(height, -0.5, 1.0) + 0.5 * recent)
+        self.status = f"{self.count}/{self.reps}{hint}"
         return self.count >= self.reps
 
 

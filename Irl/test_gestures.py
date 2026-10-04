@@ -17,16 +17,22 @@ results.append(check("60° bow", run(g.Bow(), hold(bowing, 1.0)), True))
 results.append(check("20° nod", run(g.Bow(), hold(shallow, 1.0)), False))
 
 print("Jumping jacks")
-closed = standing
-cycle = []
-t = 0.0
-for _ in range(3):
-    cycle += hold(opened, 0.2, t); t += 0.3
-    cycle += hold(closed, 0.2, t); t += 0.3
+arms_up = pose(skeleton({J.LEFT_WRIST: (600, 150), J.RIGHT_WRIST: (400, 150)}))  # feet together on purpose
+def jack_cycles(n, period=0.6, start=0.0):
+    frames, t = [], start
+    for _ in range(n):
+        frames += hold(arms_up, period / 2 - 0.05, t); t += period / 2
+        frames += hold(standing, period / 2 - 0.05, t); t += period / 2
+    return frames
 jj = g.JumpingJacks(reps=3)
-results.append(check("3 reps counted", run(jj, cycle), True) and jj.count == 3)
+results.append(check("3 arm reps, feet ignored", run(jj, jack_cycles(3)), True) and jj.count == 3)
 jj2 = g.JumpingJacks(reps=5)
-results.append(check("3 of 5 not done", run(jj2, cycle), False) and jj2.count == 3)
+results.append(check("3 of 5 not done", run(jj2, jack_cycles(3)), False) and jj2.count == 3)
+slow = g.JumpingJacks(reps=1)
+results.append(check("one 6s arm raise is too slow", run(slow, jack_cycles(1, period=6.0)), False))
+results.append(check("arms held up is not a rep", run(g.JumpingJacks(reps=1), hold(arms_up, 3.0)), False))
+one_arm = pose(skeleton({J.LEFT_WRIST: (600, 150)}))
+results.append(check("one arm waving doesn't count", run(g.JumpingJacks(reps=1), hold(one_arm, 0.3) + hold(standing, 0.3, 0.3) + hold(one_arm, 0.3, 0.6) + hold(standing, 0.3, 0.9)), False))
 
 print("Dance")
 import math
