@@ -152,3 +152,20 @@ button.ghost:hover { color: var(--text); }
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   background: var(--panel); border: 1px solid #26263a; border-radius: 12px; padding: 12px 14px;
 }
+
+/* live 3D armature from the Kinect, bottom-right */
+.pose-view {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  background: rgba(16, 16, 22, 0.85); border: 1px solid #26263a; border-radius: 14px;
+  overflow: hidden; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.pose-view canvas { display: block; }
+.pose-view-hud {
+  position: absolute; left: 10px; top: 8px; font-size: 0.8rem; color: var(--text);
+  display: flex; align-items: center; gap: 6px; text-shadow: 0 1px 2px #000;
+}
+.pose-view-hud .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b6b7b; }
+.pose-view-hud .dot.on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+.pose-view-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: #26263a; }
+.pose-view-bar > div { height: 100%; background: var(--accent); transition: width 0.15s; }
+@media (max-width: 720px) { .pose-view { width: 200px !important; height: 150px !important; } }

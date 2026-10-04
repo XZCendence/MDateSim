@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import PoseView from "./PoseView";
 
 export default function Layout() {
   return (
@@ -6,6 +7,7 @@ export default function Layout() {
       <main className="content">
         <Outlet />
       </main>
+      <PoseView />
     </div>
   );
 }

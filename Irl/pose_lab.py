@@ -23,6 +23,7 @@ from dino import Dataset, DinoEmbedder, Head, person_bbox
 from gestures import DETECTORS, distance_m
 from kinect import Kinect
 from pose import PoseTracker, draw_pose
+from pose_stream import PoseStream
 
 WINDOW = "MDateSim pose lab"
 PANEL_W = 420
@@ -97,6 +98,7 @@ def draw_panel(height, result, flash_until, now, recording=None, counts=None, le
 def main():
     tracker = PoseTracker()
     clf = PoseClassifier()
+    stream = PoseStream()
     flash_until: dict[str, float] = {}
     show_depth = False
 
@@ -141,6 +143,9 @@ def main():
                 last_record = now
 
             result = clf.update(pose, now, learned)
+            stream.publish(pose, demand=None if result.winner == IDLE else result.winner,
+                           status=result.statuses.get(result.winner, ""), progress=result.progress.get(result.winner, 0.0),
+                           probs=result.probs)
             if result.fired:
                 flash_until[result.fired] = now + 1.5
 
