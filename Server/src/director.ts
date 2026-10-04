@@ -14,7 +14,7 @@ import type { DbConnection } from "./module_bindings/index";
 import { chat, type ChatMessage } from "./grok";
 import { DEFAULT_PERSONA, PERSONAS, type Persona } from "./personas";
 import { routes } from "./registerUser";
-import { formatDelta, splitReply } from "./reply";
+import { formatDelta, inferDemand, splitReply } from "./reply";
 import { transcribe } from "./voice";
 
 const IRL_DEMANDS = ["look", "kneel", "beg", "bow", "jacks", "dance", "heart", "blow_kiss", "kiss"] as const;
@@ -112,7 +112,8 @@ three short ones, no emoji, no asterisks or stage directions, proper capitalizat
 You can SEE them through the camera. ${sees}
 You lead this date. You do not wait to be spoken to. Make them do things, at good moments and at
 bad ones: mid-conversation, right after they just did something, the moment they relax.
-To make them do something, say it in your own words AND end with one tag. Allowed tags:
+To make them do something, say it in your own words AND end with one tag, written EXACTLY like
+[demand:kneel] (the word demand, a colon, the name). Without the tag the camera does not check. Allowed tags:
 ${IRL_DEMANDS.map((d) => `[demand:${d}] (${DEMAND_HINTS[d]})`).join(", ")}.
 At most one demand tag per line, and never while another demand is still open.${run.demand ? `\nOpen demand: "${run.demand}" (${DEMAND_HINTS[run.demand] ?? run.demand}). They have not done it yet.` : "\nNo demand is open."}
 Your affection for them is ${affection} (-100 to 100); let it color your tone.
@@ -121,7 +122,7 @@ read them aloud or mention the camera system. End every line with an affection t
   }
 
   /** Generate, log, and apply one spoken line. */
-  async function say(player: Identity, run: DateRun, direction: string, heard?: string): Promise<void> {
+  async function say(player: Identity, run: DateRun, direction: string, heard?: string, mayDemand = true): Promise<void> {
     const session = db.db.gameSession.player.find(player);
     if (!session) return;
     const persona = personaById(session.dateId);
@@ -139,7 +140,9 @@ read them aloud or mention the camera system. End every line with an affection t
         ],
         { model: IRL_MODEL, temperature: 0.95, maxTokens: 200 },
       );
-      const { text: rawText, demand, affectionDelta } = splitReply(raw);
+      const { text: rawText, demand: tagged, affectionDelta } = splitReply(raw);
+      // If they clearly ordered something but forgot the tag, still arm the camera for it.
+      const demand = tagged ?? (mayDemand && !run.demand ? inferDemand(rawText) : undefined);
       const text = rawText.replace(/\s*\n+\s*/g, " ").trim(); // one subtitle, one utterance
       if (!text) return;
       // The date may have ended while Grok was thinking (tab closed); don't speak into the void.
@@ -183,7 +186,8 @@ read them aloud or mention the camera system. End every line with an affection t
 
     const did = run.did.shift();
     if (did) {
-      return say(player, run, `You just watched them do it: ${did} (${DEMAND_HINTS[did] ?? did}). React. You may want more.`);
+      // A reaction names the gesture they just did ("good jumping jacks"), so only a real tag counts here.
+      return say(player, run, `You just watched them do it: ${did} (${DEMAND_HINTS[did] ?? did}). React. You may want more; if so, end with a [demand:...] tag.`, undefined, false);
     }
 
     if (!run.greeted) {
@@ -224,7 +228,7 @@ read them aloud or mention the camera system. End every line with an affection t
         const gaveUpOn = run.demand;
         run.demand = undefined;
         await db.reducers.setDemandFor({ player, demand: "" }).catch(() => {});
-        return say(player, run, `They never did what you asked (${gaveUpOn}). You have given up on it. You are hurt or disgusted; show it. Use a clearly negative affection tag. No demand tag.`);
+        return say(player, run, `They never did what you asked (${gaveUpOn}). You have given up on it. You are hurt or disgusted; show it. Use a clearly negative affection tag. No demand tag.`, undefined, false);
       }
       if (run.nags < MAX_NAGS && waited > NAG_EVERY_MS * (run.nags + 1)) {
         run.nags += 1;

@@ -16,7 +16,7 @@ function apiKey(): string {
 /** Make a chat reply speakable: drop [demand:x]/[affection:+n] tags, emoji and stage noise. */
 export function speakable(text: string): string {
   return text
-    .replace(/\[(?:demand|affection|date):[^\]]*\]/gi, "")
+    .replace(/\[[^\[\]\n]{1,60}\]/g, "")
     .replace(/[\p{Extended_Pictographic}️‍]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
