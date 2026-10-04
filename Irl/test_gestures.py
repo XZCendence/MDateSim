@@ -17,22 +17,26 @@ results.append(check("60° bow", run(g.Bow(), hold(bowing, 1.0)), True))
 results.append(check("20° nod", run(g.Bow(), hold(shallow, 1.0)), False))
 
 print("Jumping jacks")
-arms_up = pose(skeleton({J.LEFT_WRIST: (600, 150), J.RIGHT_WRIST: (400, 150)}))  # feet together on purpose
-def jack_cycles(n, period=0.6, start=0.0):
+# straight arms overhead: elbows on the shoulder->wrist line
+arms_up = pose(skeleton({J.LEFT_ELBOW: (565, 215), J.RIGHT_ELBOW: (435, 215),
+                         J.LEFT_WRIST: (580, 130), J.RIGHT_WRIST: (420, 130)}))
+# bent arms "overhead": wrists high but elbows tucked (flailing)
+bent_up = pose(skeleton({J.LEFT_ELBOW: (600, 330), J.RIGHT_ELBOW: (400, 330),
+                         J.LEFT_WRIST: (560, 180), J.RIGHT_WRIST: (440, 180)}))
+def arm_cycles(up, n, period=0.6, start=0.0):
     frames, t = [], start
     for _ in range(n):
-        frames += hold(arms_up, period / 2 - 0.05, t); t += period / 2
+        frames += hold(up, period / 2 - 0.05, t); t += period / 2
         frames += hold(standing, period / 2 - 0.05, t); t += period / 2
     return frames
 jj = g.JumpingJacks(reps=3)
-results.append(check("3 arm reps, feet ignored", run(jj, jack_cycles(3)), True) and jj.count == 3)
+results.append(check("3 straight-arm reps", run(jj, arm_cycles(arms_up, 3)), True) and jj.count == 3)
 jj2 = g.JumpingJacks(reps=5)
-results.append(check("3 of 5 not done", run(jj2, jack_cycles(3)), False) and jj2.count == 3)
-slow = g.JumpingJacks(reps=1)
-results.append(check("one 6s arm raise is too slow", run(slow, jack_cycles(1, period=6.0)), False))
+results.append(check("3 of 5 not done", run(jj2, arm_cycles(arms_up, 3)), False) and jj2.count == 3)
+bent = g.JumpingJacks(reps=1)
+results.append(check("bent-arm flailing is not a rep", run(bent, arm_cycles(bent_up, 3)), False) and bent.count == 0)
+results.append(check("one 6s raise is too slow", run(g.JumpingJacks(reps=1), arm_cycles(arms_up, 1, period=6.0)), False))
 results.append(check("arms held up is not a rep", run(g.JumpingJacks(reps=1), hold(arms_up, 3.0)), False))
-one_arm = pose(skeleton({J.LEFT_WRIST: (600, 150)}))
-results.append(check("one arm waving doesn't count", run(g.JumpingJacks(reps=1), hold(one_arm, 0.3) + hold(standing, 0.3, 0.3) + hold(one_arm, 0.3, 0.6) + hold(standing, 0.3, 0.9)), False))
 
 print("Dance")
 import math
@@ -55,6 +59,7 @@ results.append(check("standing still", run(g.Dance(), hold(standing, 4.0)), Fals
 results.append(check("hips only, arms still", run(g.Dance(), dancing_frames(arms=False)), False))
 walk = [(i / 30, pose({j: (x + i * 4, y) for j, (x, y) in skeleton().items()})) for i in range(120)]
 results.append(check("walking across frame", run(g.Dance(), walk), False))
+results.append(check("straight-arm jack cycles are not dancing", run(g.Dance(), arm_cycles(arms_up, 8)), False))
 
 print("Heart hands")
 arms_up_apart = pose(skeleton({J.LEFT_WRIST: (600, 120), J.RIGHT_WRIST: (400, 120),
