@@ -59,6 +59,13 @@ a { color: inherit; }
   display: flex; gap: 0; align-items: flex-end;
   width: 100%; justify-content: center; margin-top: auto;
 }
+.lobby-actions {
+  position: absolute; top: 180px; left: 0; right: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 10px; z-index: 20; pointer-events: auto;
+  text-align: center; padding: 0 16px;
+}
+.lobby-actions button { margin-top: 0; }
 
 /* Character sprite + tooltip */
 .date-char {

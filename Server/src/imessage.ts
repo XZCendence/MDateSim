@@ -19,9 +19,10 @@ const app = await Spectrum({
 });
 
 // Game state lives in SpacetimeDB (see spacetimedb/src/index.ts).
-// A lobby pick creates a game_session with no spaceId; the player's first
-// text claims it by matching the date they picked, which links this iMessage
-// thread to their lobby identity. From then on history + affection persist.
+// A first lobby pick creates a game_session with no spaceId; the player's first
+// text claims it by matching the date they picked. Start over / switching dates
+// keeps that spaceId and changes dateId, so this same thread replies as the new
+// persona. History is the message table (empty after a reset).
 const db = await connectSpacetime();
 const HISTORY_LIMIT = 30;
 
@@ -53,6 +54,35 @@ function historyFor(player: Identity): ChatMessage[] {
 /** Unlinked threads (no lobby session) keep history in memory so the demo still works. */
 const fallbackHistory = new Map<string, ChatMessage[]>();
 
+/** Last date + start we saw for a linked space, so a lobby reset drops in-memory history. */
+const linkedStamp = new Map<string, { dateId: string; startedAt: bigint }>();
+
+function forgetFallbackIfReset(session: {
+  spaceId?: string;
+  dateId: string;
+  startedAt: { microsSinceUnixEpoch: bigint };
+} | undefined): void {
+  if (!session?.spaceId) return;
+  const startedAt = session.startedAt.microsSinceUnixEpoch;
+  const prev = linkedStamp.get(session.spaceId);
+  if (prev && (prev.dateId !== session.dateId || prev.startedAt !== startedAt)) {
+    fallbackHistory.delete(session.spaceId);
+  }
+  linkedStamp.set(session.spaceId, { dateId: session.dateId, startedAt });
+}
+
+db.db.gameSession.onUpdate((_ctx, prev, next) => {
+  const spaceId = next.spaceId || prev.spaceId;
+  if (
+    spaceId &&
+    (prev.dateId !== next.dateId ||
+      prev.startedAt.microsSinceUnixEpoch !== next.startedAt.microsSinceUnixEpoch)
+  ) {
+    fallbackHistory.delete(spaceId);
+  }
+  forgetFallbackIfReset(next);
+});
+
 /** `/date rin` re-targets this thread at a different date's unclaimed session (demo helper). */
 async function handleCommand(spaceId: string, text: string): Promise<string | undefined> {
   const m = /^\/date\s+(\w+)/i.exec(text);
@@ -77,6 +107,10 @@ function buildSystem(persona: Persona, affection: number, demand: string | undef
       : `\nYou have asked them to "${demand}" in front of the camera and they haven't done it yet.`;
   }
   return s;
+}
+
+function isTargetNotAllowed(err: unknown): boolean {
+  return String(err).includes("Target not allowed for this project");
 }
 
 const DEMAND_TAG = /\[demand:([a-z_]+)\]/gi;
@@ -158,6 +192,8 @@ for await (const [space, message] of app.messages) {
   }
 
   const session = sessionForSpace(space.id) ?? (await claimSession(space.id, text));
+  forgetFallbackIfReset(session);
+  // A linked space follows the session's date. Intro text / Bianca are only for an unclaimed thread.
   const persona = session ? personaById(session.dateId) : (personaFromIntro(text) ?? DEFAULT_PERSONA);
 
   let history: ChatMessage[];
@@ -209,6 +245,11 @@ for await (const [space, message] of app.messages) {
     console.log(`[${space.id}] ${persona.name}${session ? "" : " (unlinked)"}: ${replyText}${newDemand ? `  [demand:${newDemand}]` : ""}  [affection:${formatDelta(affectionDelta)}]`);
   } catch (err) {
     console.error(`[${space.id}] grok failed:`, err);
-    await space.send("ugh my phone is being weird, say that again?");
+    if (isTargetNotAllowed(err)) continue;
+    try {
+      await space.send("ugh my phone is being weird, say that again?");
+    } catch (sendErr) {
+      console.error(`[${space.id}] could not send fallback:`, sendErr);
+    }
   }
 }

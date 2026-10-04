@@ -168,31 +168,59 @@ export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {
   // Leave the player row in place.
 });
 
+/**
+ * Start a date, or start over / switch to another person.
+ * Keeps a linked iMessage spaceId and clears this sender's thread, affection,
+ * demand, and IRL plans. An unlinked session stays unclaimed for the intro text.
+ */
 export const pickDate = spacetimedb.reducer(
   { dateId: t.string() },
   (ctx, { dateId }) => {
     requirePlayer(ctx);
     requireDateId(dateId);
 
-    if (ctx.db.gameSession.player.find(ctx.sender) != null) {
-      ctx.db.gameSession.player.delete(ctx.sender);
+    for (const row of [...ctx.db.message.player.filter(ctx.sender)]) {
+      ctx.db.message.id.delete(row.id);
     }
-    if (ctx.db.dateState.player.find(ctx.sender) != null) {
-      ctx.db.dateState.player.delete(ctx.sender);
+    if (ctx.db.affection.player.find(ctx.sender) != null) {
+      ctx.db.affection.player.delete(ctx.sender);
+    }
+    for (const row of [...ctx.db.irlDate.player.filter(ctx.sender)]) {
+      ctx.db.irlDate.id.delete(row.id);
     }
 
-    ctx.db.gameSession.insert({
-      player: ctx.sender,
-      dateId,
-      startedAt: ctx.timestamp,
-      spaceId: undefined,
-    });
-    ctx.db.dateState.insert({
-      player: ctx.sender,
-      phase: 'texting',
-      demand: undefined,
-      demandMet: false,
-    });
+    const existing = ctx.db.gameSession.player.find(ctx.sender);
+    if (existing != null) {
+      ctx.db.gameSession.player.update({
+        ...existing,
+        dateId,
+        startedAt: ctx.timestamp,
+      });
+    } else {
+      ctx.db.gameSession.insert({
+        player: ctx.sender,
+        dateId,
+        startedAt: ctx.timestamp,
+        spaceId: undefined,
+      });
+    }
+
+    const state = ctx.db.dateState.player.find(ctx.sender);
+    if (state != null) {
+      ctx.db.dateState.player.update({
+        ...state,
+        phase: 'texting',
+        demand: undefined,
+        demandMet: false,
+      });
+    } else {
+      ctx.db.dateState.insert({
+        player: ctx.sender,
+        phase: 'texting',
+        demand: undefined,
+        demandMet: false,
+      });
+    }
   }
 );
 

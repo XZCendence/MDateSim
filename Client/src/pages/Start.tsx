@@ -2,22 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { findDate } from "../data/dates";
+import { PLAYER_PHONE_KEY, readSavedPhone, registerSavedPhone, type Registration } from "../lib/phone";
 import { smsLink } from "../lib/sms";
-
-const PHONE_KEY = "mdate.playerPhone";
-
-type Registration = {
-  phoneNumber: string;
-  assignedPhoneNumber: string;
-};
-
-function readSavedPhone(): string {
-  try {
-    return localStorage.getItem(PHONE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
 
 export default function Start() {
   const { dateId } = useParams();
@@ -36,24 +22,7 @@ export default function Start() {
     setError(null);
     setRegistration(null);
 
-    fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phoneNumber: savedPhone }),
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        const body = (await res.json().catch(() => null)) as
-          | { error?: string; phoneNumber?: string; assignedPhoneNumber?: string }
-          | null;
-        if (!res.ok || !body?.assignedPhoneNumber) {
-          throw new Error(body?.error || "Could not register that number");
-        }
-        return {
-          phoneNumber: body.phoneNumber ?? savedPhone,
-          assignedPhoneNumber: body.assignedPhoneNumber,
-        };
-      })
+    registerSavedPhone(savedPhone)
       .then((next) => {
         if (!controller.signal.aborted) setRegistration(next);
       })
@@ -74,13 +43,13 @@ export default function Start() {
     e.preventDefault();
     const phone = draft.trim();
     if (!phone) return;
-    localStorage.setItem(PHONE_KEY, phone);
+    localStorage.setItem(PLAYER_PHONE_KEY, phone);
     setSavedPhone(phone);
     setAttempt((n) => n + 1);
   }
 
   function useDifferentNumber() {
-    localStorage.removeItem(PHONE_KEY);
+    localStorage.removeItem(PLAYER_PHONE_KEY);
     setSavedPhone("");
     setDraft("");
     setRegistration(null);

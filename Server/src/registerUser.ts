@@ -25,6 +25,19 @@ function corsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
+function spectrumAuth(): { projectId: string; token: string } | { error: string } {
+  const projectId = process.env.PROJECT_ID;
+  const projectSecret = process.env.PROJECT_SECRET;
+  if (!projectId || !projectSecret) {
+    return { error: "Photon credentials are not configured" };
+  }
+  return { projectId, token: Buffer.from(`${projectId}:${projectSecret}`, "utf8").toString("base64") };
+}
+
+function spectrumUrl(projectId: string, path: string): string {
+  return `https://spectrum.photon.codes/projects/${encodeURIComponent(projectId)}${path}`;
+}
+
 function json(status: number, body: unknown, origin: string | null): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -52,16 +65,15 @@ function statusForSpectrum(status: number): number {
 }
 
 async function createSharedUser(phoneNumber: string): Promise<{ status: number; body: unknown }> {
-  const projectId = process.env.PROJECT_ID;
-  const projectSecret = process.env.PROJECT_SECRET;
-  if (!projectId || !projectSecret) {
-    return { status: 500, body: { error: "Photon credentials are not configured" } };
+  const auth = spectrumAuth();
+  if ("error" in auth) {
+    return { status: 500, body: { error: auth.error } };
   }
+  const { projectId, token } = auth;
 
-  const token = Buffer.from(`${projectId}:${projectSecret}`, "utf8").toString("base64");
   let response: Response;
   try {
-    response = await fetch(`https://spectrum.photon.codes/projects/${encodeURIComponent(projectId)}/users/`, {
+    response = await fetch(spectrumUrl(projectId, "/users/"), {
       method: "POST",
       headers: {
         Authorization: `Basic ${token}`,
@@ -100,47 +112,80 @@ async function createSharedUser(phoneNumber: string): Promise<{ status: number; 
   };
 }
 
+/**
+ * Placeholder for a real Photon conversation reset on start-over.
+ * Delete-and-readd is known not to work (it breaks the allowlist / assigned line).
+ * TBD: new thread or new assigned line without deleting the shared user.
+ * Do not call Photon delete from this stub.
+ */
+export async function resetPhotonConversation(
+  phoneNumber: string,
+): Promise<{ ok: true; skipped: true }> {
+  console.info("[users] Photon conversation reset skipped (delete-and-readd does not work)", phoneNumber);
+  return { ok: true, skipped: true };
+}
+
+async function readPhone(
+  request: Request,
+): Promise<{ ok: true; phoneNumber: string } | { ok: false; status: number; body: unknown }> {
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return { ok: false, status: 400, body: { error: "Send JSON with a phoneNumber" } };
+  }
+
+  const raw = parsed && typeof parsed === "object" ? (parsed as { phoneNumber?: unknown }).phoneNumber : undefined;
+  if (typeof raw !== "string" || !raw.trim()) {
+    return { ok: false, status: 400, body: { error: "Enter a phone number" } };
+  }
+
+  const phoneNumber = normalizePhoneNumber(raw);
+  if (!phoneNumber) {
+    return { ok: false, status: 400, body: { error: "Enter a valid phone number, like 5551234567 or +15551234567" } };
+  }
+  return { ok: true, phoneNumber };
+}
+
 async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
+  const users = url.pathname === "/api/users" || url.pathname === "/api/users/";
 
-  if (request.method === "OPTIONS" && url.pathname === "/api/users") {
+  if (request.method === "OPTIONS" && users) {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
 
-  if (url.pathname !== "/api/users") {
+  if (!users) {
     return json(404, { error: "Not found" }, origin);
   }
   if (request.method !== "POST") {
     return json(405, { error: "Use POST" }, origin);
   }
 
-  let parsed: unknown;
-  try {
-    parsed = await request.json();
-  } catch {
-    return json(400, { error: "Send JSON with a phoneNumber" }, origin);
+  const parsed = await readPhone(request);
+  if (!parsed.ok) {
+    return json(parsed.status, parsed.body, origin);
   }
 
-  const raw = parsed && typeof parsed === "object" ? (parsed as { phoneNumber?: unknown }).phoneNumber : undefined;
-  if (typeof raw !== "string" || !raw.trim()) {
-    return json(400, { error: "Enter a phone number" }, origin);
-  }
-
-  const phoneNumber = normalizePhoneNumber(raw);
-  if (!phoneNumber) {
-    return json(400, { error: "Enter a valid phone number, like 5551234567 or +15551234567" }, origin);
-  }
-
-  const result = await createSharedUser(phoneNumber);
+  const result = await createSharedUser(parsed.phoneNumber);
   return json(result.status, result.body, origin);
 }
 
 export function startUserRegistrationServer(): void {
-  Bun.serve({
-    port: PORT,
-    hostname: "127.0.0.1",
-    fetch: handle,
-  });
+  try {
+    Bun.serve({
+      port: PORT,
+      hostname: "127.0.0.1",
+      fetch: handle,
+    });
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? (err as { code: unknown }).code : undefined;
+    if (code === "EADDRINUSE") {
+      console.log(`[users] already listening on http://127.0.0.1:${PORT}`);
+      return;
+    }
+    throw err;
+  }
   console.log(`[users] listening on http://127.0.0.1:${PORT}`);
 }

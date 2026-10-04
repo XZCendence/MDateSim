@@ -5,6 +5,7 @@ import { getSpacetimeSnapshot, subscribeSpacetime } from "./spacetime";
 /**
  * The selected date comes from the caller's `game_session` row.
  * localStorage only keeps scheduled IRL dates until those move into SpacetimeDB.
+ * Start over / switching dates clears them. Continue leaves them alone.
  */
 export interface IrlDate {
   id: string;
@@ -67,12 +68,16 @@ function writeIrlDates(irlDates: IrlDate[]): void {
 }
 
 let seenDateId: string | null | undefined;
+let seenStartedAt: string | null | undefined;
 subscribeSpacetime(() => {
-  const dateId = getSpacetimeSnapshot().dateId;
-  if (seenDateId != null && dateId != null && seenDateId !== dateId) {
+  const { dateId, startedAt } = getSpacetimeSnapshot();
+  const switched = seenDateId != null && dateId != null && seenDateId !== dateId;
+  const restarted = seenStartedAt != null && startedAt != null && seenStartedAt !== startedAt;
+  if (switched || restarted) {
     writeIrlDates([]);
   }
   seenDateId = dateId;
+  seenStartedAt = startedAt;
 });
 
 export function useSession(): Session | null {
