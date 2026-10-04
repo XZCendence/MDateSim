@@ -55,6 +55,9 @@ export default defineConfig({
   },
   server: {
     fs: { allow: [".", bindings, moduleSrc] },
+    // Under WSL on a Windows drive (/mnt/c) file-change events never fire, so the dev server
+    // would keep serving stale code. Polling makes hot reload work there; harmless elsewhere.
+    watch: { usePolling: true, interval: 300 },
     proxy: {
       "/api": "http://127.0.0.1:8787",
     },
