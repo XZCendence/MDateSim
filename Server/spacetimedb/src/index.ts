@@ -480,6 +480,23 @@ export const endIrlDate = spacetimedb.reducer(ctx => {
   ctx.db.dateState.player.update({ ...mine, phase: 'texting', demand: undefined, demandMet: false });
 });
 
+/**
+ * The texting agent starts the IRL date for a player ("come over, now"). Same rules as
+ * beginIrlDate: one date at a time on the one Kinect, and no leftover demand.
+ */
+export const beginIrlDateFor = spacetimedb.reducer({ player: t.identity() }, (ctx, { player }) => {
+  const theirs = ctx.db.dateState.player.find(player);
+  if (theirs == null) {
+    throw new SenderError('no date state for player');
+  }
+  for (const row of [...ctx.db.dateState.iter()]) {
+    if (row.phase === 'irl' && !row.player.isEqual(player)) {
+      ctx.db.dateState.player.update({ ...row, phase: 'texting', demand: undefined, demandMet: false });
+    }
+  }
+  ctx.db.dateState.player.update({ ...theirs, phase: 'irl', demand: undefined, demandMet: false });
+});
+
 /** The director ends a date on the player's behalf (e.g. they walked off and never came back). */
 export const endIrlDateFor = spacetimedb.reducer({ player: t.identity() }, (ctx, { player }) => {
   const state = ctx.db.dateState.player.find(player);

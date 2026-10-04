@@ -157,12 +157,18 @@ function history_is_fresh(player: Identity): boolean {
   return true;
 }
 
-function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean, phase = "texting"): string {
+function buildSystem(persona: Persona, affection: number, demand: string | undefined, demandMet: boolean, phase = "texting", textsSoFar = 0): string {
   let s = `${persona.system}\n\nYour current affection for the player is ${affection} on a scale of -100 to 100. Let it color your tone. The affection tag is the change from this message, added to that score. The score stays between -100 and 100, but the change itself is not capped: +200 from -100 lands at 100, and -200 from 100 lands at -100. Match the size of the change to how the message actually felt.`;
   if (phase === "irl") {
     s += `\nYou are on an IRL date right now: the player is standing in front of the camera. Be bold and physical; ask them to do things with a demand tag early and often (every message or two), and escalate.`;
   } else {
-    s += `\nYou are only texting right now; the camera is off. Demands are rare teases, mostly save them for the IRL date.`;
+    s += `\nYou are only texting right now; the camera is off, so do NOT use demand tags.
+The texting is the lead-up to seeing them in person. YOU decide when the date starts: when they ask to meet, say they are free or nearby, or once the chat has warmed up (or you are simply done typing), tell them in your own words to come over right now (they know where: the laptop they picked you on, you are waiting there). End that message with the tag [date:start]. The date begins the instant you send it. Never use it in your first reply. And never tell them to come over WITHOUT the tag: an invitation and [date:start] always go together.`;
+    if (textsSoFar >= 5) {
+      s += `\nYou have texted long enough. In this reply, call them over and end with [date:start].`;
+    } else if (textsSoFar >= 3) {
+      s += `\nYou have been texting a while. If there is any opening at all, call them over now with [date:start].`;
+    }
   }
   if (demand) {
     s += demandMet
@@ -263,12 +269,15 @@ for await (const [space, message] of app.messages) {
   try {
     const reply = await app.responding(space, () =>
       chat([
-        { role: "system", content: buildSystem(persona, affection, demand, demandMet, phase) },
+        {
+          role: "system",
+          content: buildSystem(persona, affection, demand, demandMet, phase, history.filter((m) => m.role === "user").length),
+        },
         ...history,
         { role: "user", content: text },
       ]),
     );
-    const { text: replyText, demand: newDemand, affectionDelta } = splitReply(reply);
+    const { text: replyText, demand: newDemand, affectionDelta, startDate } = splitReply(reply);
     if (!replyText) continue;
     await space.send(replyText);
     if (session) {
@@ -278,7 +287,13 @@ for await (const [space, message] of app.messages) {
           console.warn(`[${space.id}] adjustAffection(${affectionDelta}) rejected:`, String(err)),
         );
       }
-      if (newDemand && !demand) {
+      if (startDate && phase !== "irl") {
+        // The laptop is watching date_state: this flips it to the date screen on its own.
+        console.log(`[${space.id}] ${persona.name} starts the IRL date`);
+        db.reducers.beginIrlDateFor({ player: session.player }).catch((err) =>
+          console.warn(`[${space.id}] beginIrlDateFor rejected:`, String(err)),
+        );
+      } else if (newDemand && !demand && phase === "irl") {
         db.reducers.setDemandFor({ player: session.player, demand: newDemand }).catch((err) =>
           console.warn(`[${space.id}] setDemandFor(${newDemand}) rejected:`, String(err)),
         );

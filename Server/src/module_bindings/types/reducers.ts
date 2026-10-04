@@ -8,6 +8,7 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AdjustAffectionReducer from "../adjust_affection_reducer";
 import BeginIrlDateReducer from "../begin_irl_date_reducer";
+import BeginIrlDateForReducer from "../begin_irl_date_for_reducer";
 import ClaimLatestSessionReducer from "../claim_latest_session_reducer";
 import ClaimSessionReducer from "../claim_session_reducer";
 import ClearDemandReducer from "../clear_demand_reducer";
@@ -29,6 +30,7 @@ import UnlinkSpaceReducer from "../unlink_space_reducer";
 
 export type AdjustAffectionParams = __Infer<typeof AdjustAffectionReducer>;
 export type BeginIrlDateParams = __Infer<typeof BeginIrlDateReducer>;
+export type BeginIrlDateForParams = __Infer<typeof BeginIrlDateForReducer>;
 export type ClaimLatestSessionParams = __Infer<typeof ClaimLatestSessionReducer>;
 export type ClaimSessionParams = __Infer<typeof ClaimSessionReducer>;
 export type ClearDemandParams = __Infer<typeof ClearDemandReducer>;

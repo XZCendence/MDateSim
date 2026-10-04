@@ -1,6 +1,7 @@
 /** Parsing of the tags a date appends to a reply: [demand:x] and [affection:+N]. */
 
 const DEMAND_TAG = /\[demand:([a-z_]+)\]/gi;
+const DATE_TAG = /\[date:\s*start\s*\]/gi;
 const AFFECTION_TAG = /\[affection:\s*([+-]?\d+)\s*\]/gi;
 const AFFECTION_TAG_ANY = /\[affection:[^\]]*\]/gi;
 const I32_MIN = -2147483648;
@@ -18,9 +19,10 @@ export function formatDelta(n: number): string {
 
 /**
  * Pull [demand:x] and [affection:+N] tags off the reply, in either order.
- * A missing or junk affection tag is a delta of 0. The text is what gets sent.
+ * [date:start] means "the IRL date begins now". A missing or junk affection tag is a delta
+ * of 0. The text is what gets sent.
  */
-export function splitReply(reply: string): { text: string; demand?: string; affectionDelta: number } {
+export function splitReply(reply: string): { text: string; demand?: string; affectionDelta: number; startDate: boolean } {
   let affectionDelta = 0;
   for (const m of reply.matchAll(AFFECTION_TAG)) {
     affectionDelta = clampDelta(Number(m[1]));
@@ -29,6 +31,7 @@ export function splitReply(reply: string): { text: string; demand?: string; affe
   for (const m of reply.matchAll(DEMAND_TAG)) {
     demand = m[1]!.toLowerCase();
   }
-  const text = reply.replace(AFFECTION_TAG_ANY, "").replace(DEMAND_TAG, "").trim();
-  return { text, demand, affectionDelta };
+  const startDate = reply.search(DATE_TAG) !== -1;
+  const text = reply.replace(AFFECTION_TAG_ANY, "").replace(DEMAND_TAG, "").replace(DATE_TAG, "").trim();
+  return { text, demand, affectionDelta, startDate };
 }

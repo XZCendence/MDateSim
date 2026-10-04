@@ -42,6 +42,9 @@ export default function DateScreen() {
   const [draft, setDraft] = useState("");
   const [recording, setRecording] = useState(false);
   const [flash, setFlash] = useState(false); // a demand was just met
+  const [needsSound, setNeedsSound] = useState(false); // browser blocked autoplay; one tap fixes it
+  const sawIrl = useRef(false);
+  const mounted = useRef(true);
 
   const audio = useRef<HTMLAudioElement | null>(null);
   const lastSpoken = useRef<bigint>(-1n);
@@ -97,6 +100,7 @@ export default function DateScreen() {
         return el.play();
       })
       .catch((err) => {
+        if ((err as { name?: string })?.name === "NotAllowedError") setNeedsSound(true);
         console.warn("[date] voice unavailable, subtitles only:", err);
         silent();
       });
@@ -130,26 +134,50 @@ export default function DateScreen() {
     return () => window.clearTimeout(t);
   }, [met]);
 
-  // Leaving the page ends the date.
+  // Leaving the page ends the date. Deferred so React StrictMode's mount/unmount/mount in dev
+  // doesn't end a date that the texting agent just started.
   useEffect(() => {
+    mounted.current = true;
     return () => {
-      getSpacetime()?.reducers.endIrlDate({}).catch(() => {});
+      mounted.current = false;
+      window.setTimeout(() => {
+        if (!mounted.current) getSpacetime()?.reducers.endIrlDate({}).catch(() => {});
+      }, 300);
     };
   }, []);
 
-  function enter() {
-    // Created inside the click so the browser lets us play audio from here on.
-    audio.current = new Audio();
+  const walkIn = useCallback(() => {
+    audio.current ??= new Audio();
     lastSpoken.current = mine.messages.reduce((max, m) => (m.id > max ? m.id : max), -1n);
+    setEntered(true);
+  }, [mine.messages]);
+
+  // Called over by text: the date is already running when we land here, so walk straight in.
+  useEffect(() => {
+    if (mine.phase === "irl") {
+      sawIrl.current = true;
+      if (!entered) walkIn();
+    }
+  }, [mine.phase, entered, walkIn]);
+
+  // The date ended (they gave up on you, or you walked off): back to texting once they finish talking.
+  useEffect(() => {
+    if (!entered || !sawIrl.current || mine.phase === "irl" || speaking) return;
+    const t = window.setTimeout(() => navigate(dateId ? `/start/${dateId}` : "/lobby"), 2500);
+    return () => window.clearTimeout(t);
+  }, [entered, mine.phase, speaking, navigate, dateId]);
+
+  /** Manual way in (backup for when nobody texted): same as being called over. */
+  function enter() {
+    walkIn();
     getSpacetime()
       ?.reducers.beginIrlDate({})
       .catch((err: unknown) => console.error("[spacetime] beginIrlDate failed", err));
-    setEntered(true);
   }
 
   function leave() {
     audio.current?.pause();
-    navigate("/dates");
+    navigate(dateId ? `/start/${dateId}` : "/lobby");
   }
 
   async function say(e: FormEvent) {
@@ -258,6 +286,11 @@ export default function DateScreen() {
         <div className="vn-demand">{(DEMAND_LABEL[openDemand] ?? openDemand).replace("{name}", date.name)}</div>
       )}
       {entered && flash && <div className="vn-demand is-met">Good.</div>}
+      {entered && needsSound && (
+        <button className="vn-sound" onClick={() => { audio.current?.play().catch(() => {}); setNeedsSound(false); }}>
+          Tap to hear {date.name}
+        </button>
+      )}
 
       <div className="vn-pose">
         <PoseView width={300} height={225} />
@@ -295,7 +328,7 @@ export default function DateScreen() {
             <h1>{date.name} is waiting</h1>
             <p>Stand where the camera can see you, turn your sound on, and walk in.</p>
             <button onClick={enter}>Enter the date</button>
-            <p><Link to="/dates">Not yet</Link></p>
+            <p><Link to={`/start/${date.id}`}>Not yet</Link></p>
           </div>
         </div>
       )}

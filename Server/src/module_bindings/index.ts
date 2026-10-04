@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AdjustAffectionReducer from "./adjust_affection_reducer";
 import BeginIrlDateReducer from "./begin_irl_date_reducer";
+import BeginIrlDateForReducer from "./begin_irl_date_for_reducer";
 import ClaimLatestSessionReducer from "./claim_latest_session_reducer";
 import ClaimSessionReducer from "./claim_session_reducer";
 import ClearDemandReducer from "./clear_demand_reducer";
@@ -174,6 +175,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("adjust_affection", AdjustAffectionReducer),
   __reducerSchema("begin_irl_date", BeginIrlDateReducer),
+  __reducerSchema("begin_irl_date_for", BeginIrlDateForReducer),
   __reducerSchema("claim_latest_session", ClaimLatestSessionReducer),
   __reducerSchema("claim_session", ClaimSessionReducer),
   __reducerSchema("clear_demand", ClearDemandReducer),

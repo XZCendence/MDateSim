@@ -72,6 +72,8 @@ export type MyRows = {
   demand: string | undefined;
   demandMet: boolean;
   phase: string;
+  /** True once this player's first text has linked their iMessage thread to the session. */
+  linked: boolean;
   /** This player's conversation, oldest first (texts and spoken IRL lines alike). */
   messages: { id: bigint; role: string; text: string }[];
 };
@@ -95,7 +97,11 @@ export function getMyRows(): MyRows {
   let demand: string | undefined;
   let demandMet = false;
   let phase = "texting";
+  let linked = false;
   if (conn && identityHex) {
+    for (const g of conn.db.gameSession.iter()) {
+      if (g.player.toHexString() === identityHex) linked = Boolean(g.spaceId);
+    }
     for (const a of conn.db.affection.iter()) {
       if (a.player.toHexString() === identityHex) affection = a.value;
     }
@@ -115,7 +121,7 @@ export function getMyRows(): MyRows {
           .slice(-12)
           .map((m) => ({ id: m.id, role: m.role, text: m.text }))
       : [];
-  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase, messages };
+  const value: MyRows = { irlDates: readIrlDates(), affection, demand, demandMet, phase, linked, messages };
   rowsCache = { version: rowsVersion, value };
   return value;
 }
@@ -150,9 +156,9 @@ export function getSpacetime(): DbConnection | undefined {
     .onConnect((c, identity) => {
       identityHex = identity.toHexString();
       console.info("[spacetime] connected as", identityHex.slice(0, 16));
-      c.db.gameSession.onInsert((ctx) => refresh(ctx.db));
-      c.db.gameSession.onUpdate((ctx) => refresh(ctx.db));
-      c.db.gameSession.onDelete((ctx) => refresh(ctx.db));
+      c.db.gameSession.onInsert((ctx) => (refresh(ctx.db), bumpRows()));
+      c.db.gameSession.onUpdate((ctx) => (refresh(ctx.db), bumpRows()));
+      c.db.gameSession.onDelete((ctx) => (refresh(ctx.db), bumpRows()));
       for (const table of [c.db.irlDate, c.db.affection, c.db.dateState, c.db.message]) {
         table.onInsert(bumpRows);
         table.onUpdate(bumpRows);

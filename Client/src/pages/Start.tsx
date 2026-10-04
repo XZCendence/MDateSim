@@ -1,19 +1,35 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { findDate } from "../data/dates";
 import { PLAYER_PHONE_KEY, readSavedPhone, registerSavedPhone, type Registration } from "../lib/phone";
 import { smsLink } from "../lib/sms";
+import { getMyRows, subscribeSpacetime } from "../lib/spacetime";
+import bgUrl from "../assets/characterselectbg.png";
+
+/**
+ * The texting stage, shown on the laptop while the player texts from their phone.
+ *   1. give your number  2. scan the QR and send the first text  3. the conversation mirrors here
+ * There is no "start the date" button: when the date calls you over by text, date_state flips
+ * to "irl" and Layout swaps this page for the date screen.
+ */
+
+function prettyPhone(e164: string): string {
+  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : e164;
+}
 
 export default function Start() {
   const { dateId } = useParams();
   const date = findDate(dateId);
+  const mine = useSyncExternalStore(subscribeSpacetime, getMyRows, getMyRows);
   const [savedPhone, setSavedPhone] = useState(readSavedPhone);
   const [draft, setDraft] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [registration, setRegistration] = useState<Registration | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const chatEnd = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!savedPhone) return;
@@ -37,6 +53,11 @@ export default function Start() {
     return () => controller.abort();
   }, [savedPhone, attempt]);
 
+  const lastId = mine.messages.at(-1)?.id;
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [lastId]);
+
   if (!date) return <Navigate to="/lobby" replace />;
 
   function submit(e: FormEvent) {
@@ -57,65 +78,86 @@ export default function Start() {
   }
 
   const href = registration ? smsLink(registration.assignedPhoneNumber, date.intro) : null;
+  const chatting = mine.linked && mine.messages.length > 0;
+  const step = !savedPhone || error ? 1 : chatting ? 3 : 2;
+  const first = date.name.split(" ")[0];
 
   return (
-    <section className="center">
-      <h1>Text {date.name} to start</h1>
-      <p className="muted">
-        Enter the phone you'll text from. We register it so {date.name} can reply, then the QR opens
-        Messages with the line and a first text ready to go.
-      </p>
+    <div className="start" style={{ backgroundImage: `url(${bgUrl})`, ["--accent" as string]: date.accent }}>
+      <div className="start-shade" />
+      {date.image && <img src={date.image} alt={date.name} className="start-sprite" />}
 
-      {!savedPhone && (
-        <form className="row" onSubmit={submit}>
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            name="phoneNumber"
-            placeholder="Your phone number"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            required
-          />
-          <button type="submit">Continue</button>
-        </form>
-      )}
+      <div className="start-card">
+        <Link to="/lobby" className="start-back">← Pick someone else</Link>
+        <h1>{date.name}</h1>
+        <ol className="start-steps" aria-label="Progress">
+          <li className={step > 1 ? "done" : step === 1 ? "now" : ""}>Your number</li>
+          <li className={step > 2 ? "done" : step === 2 ? "now" : ""}>Send a text</li>
+          <li className={step === 3 ? "now" : ""}>Get asked out</li>
+        </ol>
 
-      {savedPhone && pending && <p className="muted">Registering your number…</p>}
+        {step === 1 && (
+          <>
+            <p className="start-lead">{first} texts over iMessage. What number are you texting from?</p>
+            <form className="start-form" onSubmit={submit}>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                name="phoneNumber"
+                placeholder="(555) 123-4567"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                autoFocus
+                required
+              />
+              <button type="submit">Continue</button>
+            </form>
+            {error && <p className="start-error" role="alert">{error}</p>}
+          </>
+        )}
 
-      {error && (
-        <p className="muted" role="alert">
-          {error}
-        </p>
-      )}
+        {step === 2 && (
+          <>
+            {pending || !href || !registration ? (
+              <p className="start-lead">Getting {first}'s number for you…</p>
+            ) : (
+              <>
+                <p className="start-lead">Scan with your phone camera and hit send.</p>
+                <a href={href} className="start-qr" aria-label={`Text ${date.name}`}>
+                  <QRCodeSVG value={href} size={220} marginSize={2} fgColor="#1b1024" bgColor="#ffffff" />
+                </a>
+                <p className="start-number">
+                  or text <strong>{prettyPhone(registration.assignedPhoneNumber)}</strong>
+                </p>
+                <p className="start-wait"><span className="start-dot" /> Waiting for your first text…</p>
+              </>
+            )}
+          </>
+        )}
 
-      {href && registration && (
-        <>
-          <a href={href} className="qr" aria-label={`Text ${date.name}`}>
-            <QRCodeSVG value={href} size={240} marginSize={2} fgColor={date.accent} bgColor="#ffffff" />
-          </a>
-          <p className="small">
-            Or text <strong>{registration.assignedPhoneNumber}</strong> directly.
-          </p>
-          <p className="muted small">
-            This number is registered, so {date.name} can text you back. Your first text also unlocks their
-            ability to message you.
-          </p>
-        </>
-      )}
+        {step === 3 && (
+          <>
+            <div className="start-chat" aria-live="polite">
+              {mine.messages.map((m) => (
+                <div key={String(m.id)} className={m.role === "user" ? "bubble me" : "bubble them"}>
+                  {m.text}
+                </div>
+              ))}
+              <div ref={chatEnd} />
+            </div>
+            <p className="start-wait">
+              <span className="start-dot" /> Keep texting. When {first} wants to see you, the date starts right here.
+            </p>
+          </>
+        )}
 
-      {savedPhone && !pending && (
-        <p>
-          <button type="button" className="ghost" onClick={useDifferentNumber}>
-            Use a different number
+        {savedPhone && !pending && step !== 1 && (
+          <button type="button" className="start-ghost" onClick={useDifferentNumber}>
+            Not {prettyPhone(registration?.phoneNumber ?? savedPhone)}? Use a different number
           </button>
-        </p>
-      )}
-
-      <Link to="/dates" className="button">
-        I've sent it, plan a date
-      </Link>
-    </section>
+        )}
+      </div>
+    </div>
   );
 }
