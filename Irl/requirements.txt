@@ -2,3 +2,6 @@ pykinect_azure
 mediapipe>=1.0
 opencv-python
 numpy
+torch  # CPU build is enough: pip install torch --index-url https://download.pytorch.org/whl/cpu
+transformers
+scikit-learn
