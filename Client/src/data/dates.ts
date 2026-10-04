@@ -23,8 +23,8 @@ const ROSTER: Record<DateId, DateProfile> = {
   bianca: {
     id: "bianca",
     name: "Bianca Em",
-    bio: "CS student and hackathon builder. Is sweet and sometimes scary!",
-    intro: "Hello!",
+    bio: "CS student and hackathon builder. Sweet, until she decides you're hers.",
+    intro: "hi bianca, it's me from the lobby 🌸",
     accent: "#f472b6",
     image: emIdle,
     hoverImage: emHover,
@@ -32,8 +32,8 @@ const ROSTER: Record<DateId, DateProfile> = {
   rin: {
     id: "rin",
     name: "Ling Long",
-    bio: "Systems Engineer at Cluely. Tsinghua University Alumni.",
-    intro: "Hello!",
+    bio: "Systems engineer at Cluely. Tsinghua University, top of the universities in the world. Work ends at 5.",
+    intro: "hey ling long, it's me from the lobby",
     accent: "#60a5fa",
     image: lingLongIdle,
     hoverImage: lingLongHover,

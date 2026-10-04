@@ -93,8 +93,8 @@ export default function Start() {
     <section className="center">
       <h1>Text {date.name} to start</h1>
       <p className="muted">
-        Enter the phone you'll text from. We register it so she can reply, then the QR opens Messages
-        with her line and a first text ready to go.
+        Enter the phone you'll text from. We register it so {date.name} can reply, then the QR opens
+        Messages with the line and a first text ready to go.
       </p>
 
       {!savedPhone && (
@@ -130,7 +130,7 @@ export default function Start() {
             Or text <strong>{registration.assignedPhoneNumber}</strong> directly.
           </p>
           <p className="muted small">
-            This number is registered, so she can text you back. Your first text also unlocks her
+            This number is registered, so {date.name} can text you back. Your first text also unlocks their
             ability to message you.
           </p>
         </>
@@ -145,7 +145,7 @@ export default function Start() {
       )}
 
       <Link to="/dates" className="button">
-        I've texted her, plan a date
+        I've sent it, plan a date
       </Link>
     </section>
   );
