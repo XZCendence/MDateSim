@@ -49,6 +49,7 @@ import SetDemandReducer from "./set_demand_reducer";
 import SetDemandForReducer from "./set_demand_for_reducer";
 import SetIrlDateStatusReducer from "./set_irl_date_status_reducer";
 import SetPhaseReducer from "./set_phase_reducer";
+import UnlinkSpaceReducer from "./unlink_space_reducer";
 
 // Import all procedure arg schemas
 
@@ -170,6 +171,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_demand_for", SetDemandForReducer),
   __reducerSchema("set_irl_date_status", SetIrlDateStatusReducer),
   __reducerSchema("set_phase", SetPhaseReducer),
+  __reducerSchema("unlink_space", UnlinkSpaceReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

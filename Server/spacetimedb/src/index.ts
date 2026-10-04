@@ -297,6 +297,15 @@ export const claimLatestSession = spacetimedb.reducer(
   }
 );
 
+/** Detach an iMessage thread from whatever session holds it (used by /reset). */
+export const unlinkSpace = spacetimedb.reducer({ spaceId: t.string() }, (ctx, { spaceId }) => {
+  for (const row of [...ctx.db.gameSession.iter()]) {
+    if (row.spaceId === spaceId) {
+      ctx.db.gameSession.player.update({ ...row, spaceId: undefined });
+    }
+  }
+});
+
 // ---- Conversation + relationship reducers ----
 
 const ROLES = ['user', 'assistant'] as const;

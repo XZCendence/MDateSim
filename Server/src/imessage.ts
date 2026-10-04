@@ -85,6 +85,7 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
   if (/^\/reset\b/i.test(text)) {
     const session = sessionForSpace(spaceId);
     if (session) await startFresh(session.player, spaceId);
+    await db.reducers.unlinkSpace({ spaceId }).catch((err) => console.warn("unlinkSpace:", String(err)));
     fallbackHistory.delete(spaceId);
     unlinkedPersona.delete(spaceId);
     return "(fresh start. pick a date in the lobby and text me the intro line)";
@@ -95,6 +96,20 @@ async function handleCommand(spaceId: string, text: string): Promise<string | un
   if (!p) return `no date named ${m[1]}. options: ${Object.keys(PERSONAS).join(", ")}`;
   const session = await claimSession(spaceId, p.id);
   return session ? `(now texting with ${p.name})` : `(no lobby session waiting for ${p.name}, chatting unlinked)`;
+}
+
+/** The date of the most recent unclaimed lobby pick (within `withinMs`), if any. With no name
+ * in the first text, the person who just clicked in the lobby is almost always the texter. */
+function newestUnclaimedDateId(withinMs = 15 * 60_000): string | undefined {
+  let best: { dateId: string; t: bigint } | undefined;
+  const cutoff = BigInt(Date.now() - withinMs) * 1000n;
+  for (const s of db.db.gameSession.iter()) {
+    if (s.spaceId) continue;
+    const t = s.startedAt.microsSinceUnixEpoch;
+    if (t < cutoff) continue;
+    if (!best || t > best.t) best = { dateId: s.dateId, t };
+  }
+  return best?.dateId;
 }
 
 /** True when the player has no logged messages yet (so an intro is a genuine first text). */
@@ -203,7 +218,11 @@ for await (const [space, message] of app.messages) {
   if (intro && (!session || session.dateId !== intro.id || !history_is_fresh(session.player))) {
     session = (await claimSession(space.id, intro.id)) ?? session;
   } else if (!session) {
-    session = await claimSession(space.id, DEFAULT_PERSONA.id);
+    const guess = newestUnclaimedDateId();
+    if (guess) session = await claimSession(space.id, guess);
+    if (!session) {
+      unlinkedPersona.set(space.id, unlinkedPersona.get(space.id) ?? DEFAULT_PERSONA);
+    }
   }
   const persona = session
     ? personaById(session.dateId)
