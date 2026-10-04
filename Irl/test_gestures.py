@@ -1,7 +1,7 @@
 """Synthetic-pose checks for the gesture detectors. Run: python test_gestures.py"""
 
 import gestures as g
-from fixtures import J, bowing, check, heart, hold, kneeling, leaning_close, opened, pose, run, skeleton, squatting, standing
+from fixtures import SW, J, bowing, check, heart, hold, kneeling, leaning_close, opened, pose, run, skeleton, squatting, standing
 
 results = []
 print("Kneel")
@@ -28,15 +28,27 @@ results.append(check("3 reps counted", run(jj, cycle), True) and jj.count == 3)
 jj2 = g.JumpingJacks(reps=5)
 results.append(check("3 of 5 not done", run(jj2, cycle), False) and jj2.count == 3)
 
-print("Spin")
-facing = pose(skeleton())
-away = pose(skeleton({J.LEFT_SHOULDER: (450, 300), J.RIGHT_SHOULDER: (550, 300)}))
-sideon = pose(skeleton({J.LEFT_SHOULDER: (505, 300), J.RIGHT_SHOULDER: (495, 300)}))
-spin = hold(facing, 0.3, 0) + hold(sideon, 0.3, 0.5) + hold(away, 0.3, 1.0) + hold(sideon, 0.3, 1.5) + hold(facing, 0.3, 2.0)
-results.append(check("full spin", run(g.Spin(), spin), True))
-results.append(check("half turn only", run(g.Spin(), hold(facing, 0.3, 0) + hold(away, 0.3, 1.0)), False))
-slow = hold(facing, 0.3, 0) + hold(away, 0.3, 3.0) + hold(facing, 0.3, 7.0)
-results.append(check("too slow (7s)", run(g.Spin(), slow), False))
+print("Dance")
+import math
+def dancing_frames(seconds=4.0, fps=30, amp=1.2, hz=2.0, arms=True):
+    out = []
+    for i in range(int(seconds * fps)):
+        tt = i / fps
+        sway = amp * SW * math.sin(2 * math.pi * hz * tt)
+        o = {J.LEFT_HIP: (535 + sway * 0.3, 480), J.RIGHT_HIP: (465 + sway * 0.3, 480)}
+        if arms:
+            o[J.LEFT_WRIST] = (580 + sway, 460 - abs(sway))
+            o[J.RIGHT_WRIST] = (420 - sway, 460 - abs(sway))
+            o[J.LEFT_ELBOW] = (570 + sway * 0.6, 380)
+            o[J.RIGHT_ELBOW] = (430 - sway * 0.6, 380)
+        out.append((tt, pose(skeleton(o))))
+    return out
+results.append(check("dancing 4s", run(g.Dance(), dancing_frames()), True))
+results.append(check("dancing 1.5s only", run(g.Dance(), dancing_frames(seconds=1.5)), False))
+results.append(check("standing still", run(g.Dance(), hold(standing, 4.0)), False))
+results.append(check("hips only, arms still", run(g.Dance(), dancing_frames(arms=False)), False))
+walk = [(i / 30, pose({j: (x + i * 4, y) for j, (x, y) in skeleton().items()})) for i in range(120)]
+results.append(check("walking across frame", run(g.Dance(), walk), False))
 
 print("Heart hands")
 arms_up_apart = pose(skeleton({J.LEFT_WRIST: (600, 120), J.RIGHT_WRIST: (400, 120),

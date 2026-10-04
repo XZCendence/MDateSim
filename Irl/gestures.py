@@ -261,48 +261,65 @@ class JumpingJacks(Gesture):
         return self.count >= self.reps
 
 
-class Spin(Gesture):
-    """A full turn: the shoulders' left/right order flips and flips back within a few seconds."""
+class Dance(Gesture):
+    """Sustained, lively whole-body motion for a few seconds: arms and hips moving, not just drifting."""
 
-    name = "spin"
+    name = "dance"
+    hold_s = 3.0
 
-    def __init__(self, window_s: float = 5.0, min_width: float = 0.3):
+    JOINTS = [Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_ELBOW, Joint.RIGHT_ELBOW,
+              Joint.LEFT_HIP, Joint.RIGHT_HIP]
+
+    def __init__(self, window_s: float = 1.5, min_energy: float = 1.2, min_arm_share: float = 0.35):
         self.window_s = window_s
-        self.min_width = min_width  # |signed shoulder width| / max seen, below this we're side-on
+        self.min_energy = min_energy  # mean joint speed, shoulder-widths per second, over the window
+        self.min_arm_share = min_arm_share  # arms must contribute this share of the motion (walking past doesn't count)
         super().__init__()
 
     def reset(self) -> None:
         super().reset()
-        self._phases: deque[tuple[float, int]] = deque()  # (time, +1 facing / -1 away)
-        self._max_width = 1.0
-
-    @property
-    def progress(self) -> float:
-        if self.done:
-            return 1.0
-        return {0: 0.0, 1: 0.2, 2: 0.6}.get(len(self._phases), 0.6)
+        self._last: tuple[float, np.ndarray] | None = None
+        self._samples: deque[tuple[float, float, float]] = deque()  # (time, total speed, arm speed)
+        self.energy = 0.0
 
     def _check(self, pose: Pose, now: float) -> bool:
-        if not pose.visible(Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
+        if not pose.visible(*self.JOINTS):
+            self.status = "step back so I can see your arms"
+            self.score = 0.0
+            self._last = None
+            return False
+        sw = _shoulder_width(pose)
+        # Shoulder-relative, scale-free joint positions: walking or drifting moves everything
+        # together and cancels out; arms and hips moving *against* the torso is what counts.
+        centre = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)
+        pts = (pose.pixels[self.JOINTS] - centre) / sw
+        if self._last is not None:
+            t0, prev = self._last
+            dt = max(now - t0, 1e-3)
+            if dt < 0.5:  # ignore gaps (tracking dropouts)
+                speeds = np.linalg.norm(pts - prev, axis=1) / dt
+                arm = float(speeds[:4].mean())
+                self._samples.append((now, float(speeds.mean()), arm))
+        self._last = (now, pts)
+        while self._samples and now - self._samples[0][0] > self.window_s:
+            self._samples.popleft()
+        if len(self._samples) < 5:
+            self.status = "show me some moves"
             self.score = 0.0
             return False
-        signed = float(pose.pixels[Joint.RIGHT_SHOULDER, 0] - pose.pixels[Joint.LEFT_SHOULDER, 0])
-        self._max_width = max(self._max_width, abs(signed))
-        while self._phases and now - self._phases[0][0] > self.window_s:
-            self._phases.popleft()
-        side_on = 1.0 - abs(signed) / self._max_width
-        self.score = max({0: 0.0, 1: 0.0, 2: 0.6}.get(len(self._phases), 0.6), 0.5 * _ramp(side_on, 0.4, 0.9))
-        if abs(signed) / self._max_width < self.min_width:
-            self.status = "turning…"
-            return False  # side-on, ambiguous
-        facing = 1 if signed > 0 else -1
-        if not self._phases or self._phases[-1][1] != facing:
-            self._phases.append((now, facing))
-        if len(self._phases) >= 3:  # facing -> away -> facing
-            self.status = "spun!"
-            return True
-        self.status = "keep turning" if len(self._phases) == 2 else "spin around"
-        return False
+        total = float(np.mean([v for _, v, _ in self._samples]))
+        arm = float(np.mean([a for _, _, a in self._samples]))
+        share = arm / max(total, 1e-6)
+        self.energy = total
+        self.score = _ramp(total, 0.3, self.min_energy) * (0.4 + 0.6 * _ramp(share, 0.15, self.min_arm_share))
+        if total < self.min_energy:
+            self.status = f"more energy ({total:.1f})"
+            return False
+        if share < self.min_arm_share:
+            self.status = "use your arms"
+            return False
+        self.status = f"dancing ({total:.1f})"
+        return True
 
 
 class HeartHands(Gesture):
@@ -467,7 +484,7 @@ DETECTORS: dict[str, type[Gesture]] = {
     Kneel.name: Kneel,
     Bow.name: Bow,
     JumpingJacks.name: JumpingJacks,
-    Spin.name: Spin,
+    Dance.name: Dance,
     HeartHands.name: HeartHands,
     BlowKiss.name: BlowKiss,
     Kiss.name: Kiss,

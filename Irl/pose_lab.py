@@ -25,7 +25,7 @@ LABELS = {
     "kneel": "kneel",
     "bow": "bow",
     "jacks": "jumping jacks",
-    "spin": "spin around",
+    "dance": "dance",
     "heart": "heart hands",
     "blow_kiss": "blow a kiss",
     "kiss": "kiss",

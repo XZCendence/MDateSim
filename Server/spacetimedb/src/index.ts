@@ -13,7 +13,7 @@ const DEMANDS = [
   'kneel',
   'bow',
   'jacks',
-  'spin',
+  'dance',
   'heart',
   'blow_kiss',
   'kiss',
