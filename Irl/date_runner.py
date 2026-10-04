@@ -40,7 +40,7 @@ AFFECTION_FOR = {  # how much she warms up when you actually do it
     "kneel": 15,
     "bow": 10,
     "jacks": 10,
-    "spin": 8,
+    "dance": 12,
     "heart": 12,
     "blow_kiss": 12,
     "kiss": 20,

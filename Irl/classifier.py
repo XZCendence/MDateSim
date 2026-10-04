@@ -40,7 +40,9 @@ class PoseClassifier:
         win_margin: float = 1.5,  # winner prob must be this many times idle's prob
         smoothing: float = 0.35,  # EMA weight of the new frame (1 = no smoothing)
         latch_s: float = 1.5,  # how long a completed detector stays lit before resetting
+        learned_weight: float = 0.6,  # share of the fused score that comes from the DINOv2 head
     ):
+        self.learned_weight = learned_weight
         self.names = names or list(DETECTORS)
         self.detectors: dict[str, Gesture] = {n: make(n) for n in self.names}
         self.idle_floor = idle_floor
@@ -57,7 +59,11 @@ class PoseClassifier:
         self._done_at.clear()
         self._probs = {IDLE: 1.0, **{n: 0.0 for n in self.names}}
 
-    def update(self, pose: Pose | None, now: float | None = None) -> Result:
+    def update(self, pose: Pose | None, now: float | None = None,
+               learned: dict[str, float] | None = None) -> Result:
+        """`learned` is an optional probability dict from the DINOv2 head (dino.Head.predict_proba).
+        When present, each gesture's score blends geometry with the learned probability, and the
+        learned idle probability raises the idle score, so neither source alone can force a pose."""
         now = time.monotonic() if now is None else now
         fired = None
         for name, d in self.detectors.items():
@@ -68,8 +74,14 @@ class PoseClassifier:
                 d.reset()
 
         scores = {n: float(min(1.0, max(0.0, d.score))) for n, d in self.detectors.items()}
+        if learned:
+            for n in scores:
+                if n in learned and not self.detectors[n].done:
+                    scores[n] = self.learned_weight * learned[n] + (1 - self.learned_weight) * scores[n]
         best = max(scores.values(), default=0.0)
         scores[IDLE] = max(self.idle_floor, 1.0 - best) if pose is not None else 1.0
+        if learned and IDLE in learned and pose is not None:
+            scores[IDLE] = max(scores[IDLE], learned[IDLE])
 
         # Softmax over scores, then EMA for a steady display.
         exps = {n: math.exp(s / self.temperature) for n, s in scores.items()}

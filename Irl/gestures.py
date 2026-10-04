@@ -70,6 +70,32 @@ def _ramp(x: float, lo: float, hi: float) -> float:
     return float(min(1.0, max(0.0, (x - lo) / (hi - lo))))
 
 
+def _angle_deg(a: np.ndarray, b: np.ndarray) -> float:
+    """Angle between two 2-D vectors, degrees."""
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na < 1e-6 or nb < 1e-6:
+        return 0.0
+    return float(np.degrees(np.arccos(np.clip(np.dot(a, b) / (na * nb), -1.0, 1.0))))
+
+
+ARMS = {
+    "left": (Joint.LEFT_SHOULDER, Joint.LEFT_ELBOW, Joint.LEFT_WRIST),
+    "right": (Joint.RIGHT_SHOULDER, Joint.RIGHT_ELBOW, Joint.RIGHT_WRIST),
+}
+
+
+def arm_arc_deg(pose: Pose, side: str) -> float:
+    """Where the arm points: 0 = hanging straight down, 90 = out to the side, 180 = straight up."""
+    sh, _, wr = ARMS[side]
+    return _angle_deg(pose.pixels[wr] - pose.pixels[sh], np.array([0.0, 1.0]))
+
+
+def elbow_deg(pose: Pose, side: str) -> float:
+    """Elbow angle: 180 = arm fully extended, 90 = right angle."""
+    sh, el, wr = ARMS[side]
+    return _angle_deg(pose.pixels[sh] - pose.pixels[el], pose.pixels[wr] - pose.pixels[el])
+
+
 def _depth(pose: Pose, *joints: Joint) -> float | None:
     """Median valid depth (m) over joints, or None."""
     z = pose.xyz[list(joints), 2]
@@ -211,98 +237,156 @@ class Bow(Gesture):
 
 
 class JumpingJacks(Gesture):
-    """Count full open/close cycles: arms overhead + feet apart, then arms down + feet together."""
+    """Straight arms sweeping through their full arc: hanging down -> overhead -> down.
+
+    Heavily biased toward *extension through the range*: both elbows must stay nearly
+    straight and the shoulder arc must travel from below `down_deg` to above `up_deg`.
+    Bent-arm flailing, however energetic, is not a jack. Feet are ignored.
+    """
 
     name = "jacks"
 
-    def __init__(self, reps: int = 5):
+    def __init__(self, reps: int = 5, up_deg: float = 140.0, down_deg: float = 45.0,
+                 min_elbow_deg: float = 145.0, min_cycle_s: float = 0.3, max_cycle_s: float = 2.5):
         self.reps = reps
+        self.up_deg = up_deg
+        self.down_deg = down_deg
+        self.min_elbow_deg = min_elbow_deg
+        self.min_cycle_s = min_cycle_s
+        self.max_cycle_s = max_cycle_s
         super().__init__()
 
     def reset(self) -> None:
         super().reset()
         self.count = 0
-        self._open = False
+        self._phase = "down"
+        self._cycle_start: float | None = None
+        self._bent_in_cycle = False
         self._cycle_times: deque[float] = deque()
+        self._arc_hist: deque[tuple[float, float]] = deque()  # (time, mean arc)
 
     @property
     def progress(self) -> float:
         return 1.0 if self.done else min(1.0, self.count / self.reps)
 
     def _check(self, pose: Pose, now: float) -> bool:
-        needed = (Joint.NOSE, Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER,
-                  Joint.LEFT_ANKLE, Joint.RIGHT_ANKLE)
+        needed = (Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_ELBOW, Joint.RIGHT_ELBOW,
+                  Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)
         if not pose.visible(*needed):
-            self.status = f"{self.count}/{self.reps} (step back, I need your feet)"
+            self.status = f"{self.count}/{self.reps} (show me both arms)"
             self.score = 0.0
             return False
-        sw = _shoulder_width(pose)
-        nose_y = pose.pixels[Joint.NOSE, 1]
-        shoulder_y = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)[1]
-        wl, wr = pose.pixels[Joint.LEFT_WRIST, 1], pose.pixels[Joint.RIGHT_WRIST, 1]
-        feet = float(abs(pose.pixels[Joint.LEFT_ANKLE, 0] - pose.pixels[Joint.RIGHT_ANKLE, 0])) / sw
+        arcs = [arm_arc_deg(pose, "left"), arm_arc_deg(pose, "right")]
+        elbows = [elbow_deg(pose, "left"), elbow_deg(pose, "right")]
+        arc = float(np.mean(arcs))
+        extension = _ramp(float(min(elbows)), 110.0, self.min_elbow_deg)  # 1 = both arms straight
+        straight = min(elbows) >= self.min_elbow_deg
 
-        is_open = wl < nose_y and wr < nose_y and feet > 1.3
-        is_closed = wl > shoulder_y and wr > shoulder_y and feet < 0.9
+        self._arc_hist.append((now, arc))
+        while self._arc_hist and now - self._arc_hist[0][0] > 2.0:
+            self._arc_hist.popleft()
+        sweep = (max(a for _, a in self._arc_hist) - min(a for _, a in self._arc_hist)) if self._arc_hist else 0.0
 
-        if not self._open and is_open:
-            self._open = True
-        elif self._open and is_closed:
-            self._open = False
-            self.count += 1
-            self._cycle_times.append(now)
-        while self._cycle_times and now - self._cycle_times[0] > 3.0:
+        hint = ""
+        if not straight:
+            self._bent_in_cycle = True
+        if self._phase == "down" and min(arcs) > self.up_deg:
+            self._phase = "up"
+            if self._cycle_start is None:
+                self._cycle_start = now
+                self._bent_in_cycle = not straight
+        elif self._phase == "up" and max(arcs) < self.down_deg:
+            self._phase = "down"
+            took = now - (self._cycle_start if self._cycle_start is not None else now)
+            self._cycle_start = now
+            if self._bent_in_cycle:
+                hint = " (straighten your arms)"
+            elif took > self.max_cycle_s:
+                hint = " (faster!)"
+            elif took >= self.min_cycle_s:
+                self.count += 1
+                self._cycle_times.append(now)
+            self._bent_in_cycle = False
+        while self._cycle_times and now - self._cycle_times[0] > 4.0:
             self._cycle_times.popleft()
-        arms = _ramp((shoulder_y - (wl + wr) / 2) / sw, 0.0, 1.2)
-        openness = 0.5 * arms + 0.5 * _ramp(feet, 0.8, 1.4)
+
         recent = _ramp(len(self._cycle_times), 0, 2)
-        self.score = max(0.45 * openness, 0.5 * openness + 0.5 * recent)
-        self.status = f"{self.count}/{self.reps}"
+        # Score: how straight the arms are x how much of the arc they've covered lately, boosted by reps.
+        self.score = extension * max(0.5 * _ramp(sweep, 30.0, 120.0), 0.4 * _ramp(sweep, 30.0, 120.0) + 0.6 * recent)
+        self.status = f"{self.count}/{self.reps}{hint}"
         return self.count >= self.reps
 
 
-class Spin(Gesture):
-    """A full turn: the shoulders' left/right order flips and flips back within a few seconds."""
+class Dance(Gesture):
+    """Sustained, lively whole-body motion for a few seconds: arms and hips moving, not just drifting."""
 
-    name = "spin"
+    name = "dance"
+    hold_s = 3.0
 
-    def __init__(self, window_s: float = 5.0, min_width: float = 0.3):
+    JOINTS = [Joint.LEFT_WRIST, Joint.RIGHT_WRIST, Joint.LEFT_ELBOW, Joint.RIGHT_ELBOW,
+              Joint.LEFT_HIP, Joint.RIGHT_HIP]
+
+    def __init__(self, window_s: float = 1.5, min_energy: float = 1.2, min_arm_share: float = 0.35):
         self.window_s = window_s
-        self.min_width = min_width  # |signed shoulder width| / max seen, below this we're side-on
+        self.min_energy = min_energy  # mean joint speed, shoulder-widths per second, over the window
+        self.min_arm_share = min_arm_share  # arms must contribute this share of the motion (walking past doesn't count)
         super().__init__()
 
     def reset(self) -> None:
         super().reset()
-        self._phases: deque[tuple[float, int]] = deque()  # (time, +1 facing / -1 away)
-        self._max_width = 1.0
-
-    @property
-    def progress(self) -> float:
-        if self.done:
-            return 1.0
-        return {0: 0.0, 1: 0.2, 2: 0.6}.get(len(self._phases), 0.6)
+        self._last: tuple[float, np.ndarray] | None = None
+        self._samples: deque[tuple[float, float, float]] = deque()  # (time, total speed, arm speed)
+        self._straight: deque[tuple[float, bool]] = deque()  # (time, both arms extended this frame)
+        self.energy = 0.0
 
     def _check(self, pose: Pose, now: float) -> bool:
-        if not pose.visible(Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER):
+        if not pose.visible(*self.JOINTS):
+            self.status = "step back so I can see your arms"
+            self.score = 0.0
+            self._last = None
+            return False
+        sw = _shoulder_width(pose)
+        # Shoulder-relative, scale-free joint positions: walking or drifting moves everything
+        # together and cancels out; arms and hips moving *against* the torso is what counts.
+        centre = _mid(pose, Joint.LEFT_SHOULDER, Joint.RIGHT_SHOULDER)
+        pts = (pose.pixels[self.JOINTS] - centre) / sw
+        if self._last is not None:
+            t0, prev = self._last
+            dt = max(now - t0, 1e-3)
+            if dt < 0.5:  # ignore gaps (tracking dropouts)
+                speeds = np.linalg.norm(pts - prev, axis=1) / dt
+                arm = float(speeds[:4].mean())
+                self._samples.append((now, float(speeds.mean()), arm))
+        self._last = (now, pts)
+        both_straight = min(elbow_deg(pose, "left"), elbow_deg(pose, "right")) >= 145.0
+        self._straight.append((now, both_straight))
+        while self._samples and now - self._samples[0][0] > self.window_s:
+            self._samples.popleft()
+        while self._straight and now - self._straight[0][0] > self.window_s:
+            self._straight.popleft()
+        if len(self._samples) < 5:
+            self.status = "show me some moves"
             self.score = 0.0
             return False
-        signed = float(pose.pixels[Joint.RIGHT_SHOULDER, 0] - pose.pixels[Joint.LEFT_SHOULDER, 0])
-        self._max_width = max(self._max_width, abs(signed))
-        while self._phases and now - self._phases[0][0] > self.window_s:
-            self._phases.popleft()
-        side_on = 1.0 - abs(signed) / self._max_width
-        self.score = max({0: 0.0, 1: 0.0, 2: 0.6}.get(len(self._phases), 0.6), 0.5 * _ramp(side_on, 0.4, 0.9))
-        if abs(signed) / self._max_width < self.min_width:
-            self.status = "turning…"
-            return False  # side-on, ambiguous
-        facing = 1 if signed > 0 else -1
-        if not self._phases or self._phases[-1][1] != facing:
-            self._phases.append((now, facing))
-        if len(self._phases) >= 3:  # facing -> away -> facing
-            self.status = "spun!"
-            return True
-        self.status = "keep turning" if len(self._phases) == 2 else "spin around"
-        return False
+        total = float(np.mean([v for _, v, _ in self._samples]))
+        arm = float(np.mean([a for _, _, a in self._samples]))
+        share = arm / max(total, 1e-6)
+        self.energy = total
+        straight_share = float(np.mean([b for _, b in self._straight])) if self._straight else 0.0
+        jack_like = _ramp(straight_share, 0.4, 0.8)  # arms locked straight most of the time = jacks territory
+        self.score = (_ramp(total, 0.3, self.min_energy) * (0.4 + 0.6 * _ramp(share, 0.15, self.min_arm_share))
+                      * (1.0 - 0.8 * jack_like))
+        if jack_like > 0.6 and total >= self.min_energy:
+            self.status = "that's jumping jacks, loosen up"
+            return False
+        if total < self.min_energy:
+            self.status = f"more energy ({total:.1f})"
+            return False
+        if share < self.min_arm_share:
+            self.status = "use your arms"
+            return False
+        self.status = f"dancing ({total:.1f})"
+        return True
 
 
 class HeartHands(Gesture):
@@ -409,9 +493,9 @@ class Kiss(Gesture):
     name = "kiss"
     hold_s = 0.4
 
-    def __init__(self, max_nose_m: float = 0.55, min_face_ratio: float = 0.9):
+    def __init__(self, max_nose_m: float = 0.35, min_face_ratio: float = 1.4):
         self.max_nose_m = max_nose_m
-        self.min_face_ratio = min_face_ratio  # ear-to-ear width / shoulder width; ~0.4 when upright
+        self.min_face_ratio = min_face_ratio  # ear-to-ear / shoulder width; ~0.4 upright, >1.4 with the face at the lens
         super().__init__()
 
     def _check(self, pose: Pose, now: float) -> bool:
@@ -430,20 +514,20 @@ class Kiss(Gesture):
         ratio = face / sw
 
         s_close = max(
-            _ramp(nose_z, 1.1, self.max_nose_m) if not np.isnan(nose_z) else 0.0,
-            _ramp(shoulder_z, 1.4, 0.9) if (np.isnan(nose_z) and shoulder_z is not None) else 0.0,
-            _ramp(ratio, 0.45, self.min_face_ratio),
+            _ramp(nose_z, 0.9, self.max_nose_m) if not np.isnan(nose_z) else 0.0,
+            _ramp(shoulder_z, 1.0, 0.6) if (np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+            _ramp(ratio, 0.6, self.min_face_ratio),
         )
         s_lean = max(
-            _ramp(ratio, 0.45, self.min_face_ratio),
-            _ramp(shoulder_z - nose_z, 0.0, 0.15) if (not np.isnan(nose_z) and shoulder_z is not None) else 0.0,
+            _ramp(ratio, 0.6, self.min_face_ratio),
+            _ramp(shoulder_z - nose_z, 0.05, 0.25) if (not np.isnan(nose_z) and shoulder_z is not None) else 0.0,
         )
         self.score = s_close * (0.5 + 0.5 * s_lean)
         close = (not np.isnan(nose_z) and nose_z < self.max_nose_m) or (
-            np.isnan(nose_z) and shoulder_z is not None and shoulder_z < 0.9  # nose too close to read at all
+            np.isnan(nose_z) and shoulder_z is not None and shoulder_z < 0.6  # nose too close to read at all
         )
         leaning = ratio > self.min_face_ratio or (
-            not np.isnan(nose_z) and shoulder_z is not None and (shoulder_z - nose_z) > 0.15
+            not np.isnan(nose_z) and shoulder_z is not None and (shoulder_z - nose_z) > 0.25
         )
         if close and leaning:
             self.status = "💋"
@@ -467,7 +551,7 @@ DETECTORS: dict[str, type[Gesture]] = {
     Kneel.name: Kneel,
     Bow.name: Bow,
     JumpingJacks.name: JumpingJacks,
-    Spin.name: Spin,
+    Dance.name: Dance,
     HeartHands.name: HeartHands,
     BlowKiss.name: BlowKiss,
     Kiss.name: Kiss,
