@@ -89,7 +89,7 @@ function refresh(db: {
   };
 }): void {
   if (!identityHex) return;
-  const mine = sessionFor(db, focusPlayerHex()) ?? sessionFor(db, identityHex);
+  const mine = sessionFor(db, identityHex);
   setSnapshot({
     ready: true,
     dateId: mine?.dateId ?? null,
@@ -111,12 +111,6 @@ export type MyRows = {
   linked: boolean;
   /** This player's conversation, oldest first (texts and spoken IRL lines alike). */
   messages: { id: bigint; role: string; text: string }[];
-  /**
-   * Conversation to mirror on the laptop. Same as `messages` when this browser is the
-   * linked player; otherwise the newest linked thread (a refresh used to mint a new
-   * identity and leave the QR screen staring at an empty session).
-   */
-  liveMessages: { id: bigint; role: string; text: string }[];
 };
 
 let rowsVersion = 0;
@@ -141,46 +135,22 @@ function messagesFor(playerHex: string): { id: bigint; role: string; text: strin
     .map((m) => ({ id: m.id, role: m.role, text: m.text }));
 }
 
-/** Player whose thread the laptop should mirror (this tab, or the newest linked one). */
-function focusPlayerHex(): string | undefined {
-  if (!conn) return identityHex;
-  if (identityHex && messagesFor(identityHex).length > 0) return identityHex;
-  if (identityHex) {
-    for (const g of conn.db.gameSession.iter()) {
-      if (g.player.toHexString() === identityHex && hasSpaceId(g.spaceId)) return identityHex;
-    }
-  }
-  const linked = new Set<string>();
-  for (const g of conn.db.gameSession.iter()) {
-    if (hasSpaceId(g.spaceId)) linked.add(g.player.toHexString());
-  }
-  let best: { player: string; t: bigint } | undefined;
-  for (const m of conn.db.message.iter()) {
-    const player = m.player.toHexString();
-    if (!linked.has(player)) continue;
-    const t = m.sentAt.microsSinceUnixEpoch;
-    if (!best || t > best.t) best = { player, t };
-  }
-  return best?.player ?? identityHex;
-}
-
 export function getMyRows(): MyRows {
   if (rowsCache?.version === rowsVersion) return rowsCache.value;
-  const focus = focusPlayerHex();
   let affection = 0;
   let demand: string | undefined;
   let demandMet = false;
   let phase = "texting";
   let linked = false;
-  if (conn && focus) {
+  if (conn && identityHex) {
     for (const g of conn.db.gameSession.iter()) {
-      if (g.player.toHexString() === focus) linked = hasSpaceId(g.spaceId);
+      if (g.player.toHexString() === identityHex) linked = hasSpaceId(g.spaceId);
     }
     for (const a of conn.db.affection.iter()) {
-      if (a.player.toHexString() === focus) affection = a.value;
+      if (a.player.toHexString() === identityHex) affection = a.value;
     }
     for (const d of conn.db.dateState.iter()) {
-      if (d.player.toHexString() === focus) {
+      if (d.player.toHexString() === identityHex) {
         demand = d.demand;
         demandMet = d.demandMet;
         phase = d.phase;
@@ -188,7 +158,6 @@ export function getMyRows(): MyRows {
     }
   }
   const messages = identityHex ? messagesFor(identityHex) : [];
-  const liveMessages = messages.length > 0 ? messages : messagesFor(focus ?? "");
   const value: MyRows = {
     irlDates: readIrlDates(),
     affection,
@@ -197,7 +166,6 @@ export function getMyRows(): MyRows {
     phase,
     linked,
     messages,
-    liveMessages,
   };
   rowsCache = { version: rowsVersion, value };
   return value;

@@ -244,14 +244,6 @@ for await (const [space, message] of app.messages) {
     if (!session) {
       unlinkedPersona.set(space.id, unlinkedPersona.get(space.id) ?? DEFAULT_PERSONA);
     }
-  } else {
-    // Laptop refresh mints a new identity and a new unclaimed lobby pick. The phone is
-    // still talking to the old session, so the QR screen never sees the chat. Steal the
-    // thread for that newer pick.
-    const newer = newestUnclaimed();
-    if (newer && newer.startedAt > session.startedAt.microsSinceUnixEpoch) {
-      session = (await claimSession(space.id, newer.dateId)) ?? session;
-    }
   }
   const persona = session
     ? personaById(session.dateId)

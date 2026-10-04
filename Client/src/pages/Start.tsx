@@ -53,7 +53,7 @@ export default function Start() {
     return () => controller.abort();
   }, [savedPhone, attempt]);
 
-  const chat = mine.liveMessages;
+  const chat = mine.messages;
   const lastId = chat.at(-1)?.id;
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
